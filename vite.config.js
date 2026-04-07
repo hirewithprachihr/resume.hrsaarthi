@@ -1,11 +1,10 @@
-import { defineConfig, splitVendorChunkPlugin } from 'vite'
+import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
 export default defineConfig({
   plugins: [
     react(),
-    splitVendorChunkPlugin(),
   ],
 
   resolve: {
@@ -34,14 +33,6 @@ export default defineConfig({
 
           // Supabase client — single chunk for caching
           if (id.includes('@supabase')) return 'supabase'
-
-          // React ecosystem correctly grouped to avoid __SECRET_INTERNALS error
-          if (id.includes('node_modules/react/') || 
-              id.includes('node_modules/react-dom/') || 
-              id.includes('node_modules/react-router/') || 
-              id.includes('node_modules/react-router-dom/')) {
-            return 'react-vendor'
-          }
         },
       },
     },
