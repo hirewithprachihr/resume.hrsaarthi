@@ -35,12 +35,13 @@ export default defineConfig({
           // Supabase client — single chunk for caching
           if (id.includes('@supabase')) return 'supabase'
 
-          // React ecosystem
-          if (id.includes('react-dom')) return 'react-dom'
-          if (id.includes('react-router')) return 'react-router'
-
-          // All other node_modules
-          if (id.includes('node_modules')) return 'vendor'
+          // React ecosystem correctly grouped to avoid __SECRET_INTERNALS error
+          if (id.includes('node_modules/react/') || 
+              id.includes('node_modules/react-dom/') || 
+              id.includes('node_modules/react-router/') || 
+              id.includes('node_modules/react-router-dom/')) {
+            return 'react-vendor'
+          }
         },
       },
     },
