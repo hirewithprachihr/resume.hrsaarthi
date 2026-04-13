@@ -14,7 +14,7 @@ const DEFAULT_SETTINGS = {
 }
 
 export default function PrachiSignature({ data = {}, settings = {} }) {
-  const { accentColor = DEFAULT_SETTINGS.accentColor, sidebarColor = DEFAULT_SETTINGS.sidebarColor } = settings
+  const { accentColor = DEFAULT_SETTINGS.accentColor, sidebarColor = DEFAULT_SETTINGS.sidebarColor, fontSize = 'medium' } = settings
   const { personal = {}, experience = [], education = [], skills = [], certifications = [], projects = [], languages = [] } = data
 
   const navyBg    = sidebarColor
@@ -23,11 +23,27 @@ export default function PrachiSignature({ data = {}, settings = {} }) {
   const bodyFont  = "'Inter', 'Helvetica Neue', Arial, sans-serif"
   const serifFont = "'Libre Baskerville', Georgia, serif"
 
+  // Font size scaling
+  const fontSizeMap = {
+    small: { base: 7, heading: 8.5, name: 18, title: 8.5, sectionLabel: 7, contact: 7 },
+    medium: { base: 8, heading: 9.5, name: 22, title: 10, sectionLabel: 8, contact: 8 },
+    large: { base: 9, heading: 11, name: 26, title: 11.5, sectionLabel: 9, contact: 9 }
+  }
+  const sizes = fontSizeMap[fontSize] || fontSizeMap.medium
+
+  // Helper to get initials from name
+  const getInitials = (name) => {
+    if (!name) return '??'
+    const parts = name.trim().split(' ')
+    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase()
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+  }
+
   const sideStyle = { background: navyBg, color: white, padding: '40px 24px', boxSizing: 'border-box' }
   const mainStyle = { background: white, color: '#1A1A2E', padding: '40px 32px', boxSizing: 'border-box' }
 
   const sectionLabel = {
-    fontSize: '8px', fontWeight: 900, letterSpacing: '0.2em', textTransform: 'uppercase',
+    fontSize: `${sizes.sectionLabel}px`, fontWeight: 900, letterSpacing: '0.2em', textTransform: 'uppercase',
     color: goldColor, marginBottom: '12px', fontFamily: bodyFont,
     display: 'flex', alignItems: 'center', gap: 8,
   }
@@ -42,15 +58,15 @@ export default function PrachiSignature({ data = {}, settings = {} }) {
   }
 
   const mainSectionTitle = {
-    fontSize: '9px', fontWeight: 900, letterSpacing: '0.18em', textTransform: 'uppercase',
+    fontSize: `${sizes.heading}px`, fontWeight: 900, letterSpacing: '0.18em', textTransform: 'uppercase',
     color: goldColor, marginBottom: '14px', fontFamily: bodyFont,
   }
 
   return (
-    <div className="resume-a4" style={{ display: 'flex', fontFamily: bodyFont, background: white }}>
+    <div style={{ display: 'flex', fontFamily: bodyFont, background: white, minHeight: '100%' }}>
 
       {/* ── LEFT SIDEBAR ─────────────────────────────── */}
-      <div style={{ width: '28%', ...sideStyle, display: 'flex', flexDirection: 'column', gap: 0 }}>
+      <div data-is-sidebar="true" style={{ width: '28%', ...sideStyle, display: 'flex', flexDirection: 'column', gap: 0 }}>
 
         {/* Name + Title */}
         <div style={{ marginBottom: 28 }}>

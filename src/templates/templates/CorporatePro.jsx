@@ -31,7 +31,7 @@ const CorporatePro = React.memo(function CorporatePro({ data, settings }) {
   return (
     <div style={{ display: 'flex', fontFamily: TYPE.SANS, ...pt(TYPE.SIZE.BODY), minHeight: '100%' }}>
       {/* Left sidebar */}
-      <div style={{ width: '240px', flexShrink: 0, background: dark, color: '#e2e8f0', padding: '36px 22px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div data-is-sidebar="true" style={{ width: '240px', flexShrink: 0, background: dark, color: '#e2e8f0', padding: '40px 22px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         {/* Avatar / Photo */}
         {personal.photo ? (
           <img src={personal.photo} alt="Profile" style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', border: `2px solid ${accent}40`, marginBottom: '4px', flexShrink: 0 }} />
@@ -96,7 +96,7 @@ const CorporatePro = React.memo(function CorporatePro({ data, settings }) {
       </div>
 
       {/* Right main */}
-      <div style={{ flex: 1, background: '#fff', padding: '36px 32px' }}>
+      <div style={{ flex: 1, background: '#fff', padding: '40px 32px' }}>
         {personal.summary?.trim() && (
           <div className="resume-entry" style={{ marginBottom: '22px' }}>
             <Section title="Profile" accent={accent}>

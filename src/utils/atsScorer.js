@@ -205,6 +205,20 @@ function scoreContent(data) {
   if (data.projects.length > 0)       value += 2
   if (data.hobbies.length > 0)        value += 1.5
 
+  // Senior roles: soft nudge for notice period (screening norm in many markets)
+  const p = data.personal || {}
+  const titleLower = (p.jobTitle || '').toLowerCase()
+  const yrs = parseInt(String(p.yearsExperience || '').replace(/\D/g, ''), 10)
+  const readsSenior = titleLower.includes('senior') || titleLower.includes('lead') || titleLower.includes('principal') || titleLower.includes('director')
+  const senior = readsSenior || (!Number.isNaN(yrs) && yrs >= 8)
+  if (senior && !p.noticePeriodDays) {
+    tips.push({
+      level: 'info',
+      msg: 'For senior roles, adding notice period (Job search preferences) helps recruiters align timelines.',
+      section: 'personal',
+    })
+  }
+
   return { value: Math.min(40, value), tips }
 }
 

@@ -62,9 +62,9 @@ export const TYPE = {
 
   // ── Spacing Constants (px) ───────────────────────────────
   SPACE: {
-    PAGE_TOP      : 36,  // Padding from top of page to first content
-    PAGE_SIDES    : 44,  // Left/right page margin
-    PAGE_SIDES_SM : 32,  // Tighter side margin for two-column layouts
+    PAGE_TOP      : 40,  // Padding from top of page to first content
+    PAGE_SIDES    : 32,  // Standard side margin
+    PAGE_SIDES_SM : 28,  // Tighter side margin for two-column layouts
     SECTION_BOTTOM: 6,   // Space between section head rule and first entry
     ENTRY_BOTTOM  : 14,  // Space between consecutive experience entries
     AFTER_SECTION : 20,  // Space after entire section block before next

@@ -85,7 +85,7 @@ const CreativeSidebar = React.memo(function CreativeSidebar({ data, settings }) 
       </div>
 
       {/* Main */}
-      <div style={{ flex: 1, background: '#fff', padding: '36px 28px' }}>
+      <div style={{ flex: 1, background: '#fff', padding: '40px 28px' }}>
         {personal.summary?.trim() && (
           <div className="resume-entry" style={{ marginBottom: '20px', padding: '14px 16px', background: `${accent}08`, borderRadius: '10px', borderLeft: `3px solid ${accent}` }}>
             <p style={{ ...pt(TYPE.SIZE.BODY, TYPE.leading.relaxed), color: '#334155', margin: 0 }}>{personal.summary}</p>

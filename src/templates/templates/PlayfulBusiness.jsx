@@ -10,7 +10,7 @@ export default function PlayfulBusiness({ data, settings }) {
     <div className="resume-canvas bg-[#FAFAF9]" style={{ fontFamily: '"Outfit", "Inter", sans-serif' }}>
       
       {/* HEADER WRAPPER */}
-      <div className="p-8 pb-4">
+      <div className="p-10 pb-4">
         <header className="rounded-2xl p-6 relative overflow-hidden" style={{ background: accent }}>
           <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/20 rounded-full blur-xl pointer-events-none" />
           <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-black/10 rounded-full blur-xl pointer-events-none" />

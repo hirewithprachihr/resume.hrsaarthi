@@ -13,7 +13,9 @@
  *   resumeData: {
  *     name, currentRole, yearsExp, topSkills, achievement1, achievement2,
  *     education, location
- *   }
+ *   },
+ *   existingLetter?: string,
+ *   refineInstruction?: string
  * }
  * Headers: Authorization: Bearer <user_jwt>
  *
@@ -37,17 +39,16 @@ Rules:
 - Write naturally for India: mention rupees (₹) not dollars for salary context, reference Indian companies, cities
 - End with a polite, confident call to action`
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
+
 Deno.serve(async (req: Request) => {
   // ── CORS preflight ──────────────────────────────────────────
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      status: 204,
-      headers: {
-        "Access-Control-Allow-Origin" : "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "authorization, content-type",
-      },
-    })
+    return new Response('ok', { headers: CORS_HEADERS })
   }
 
   try {
@@ -69,6 +70,8 @@ Deno.serve(async (req: Request) => {
       jobDescription  = "",
       tone            = "formal",
       resumeData      = {},
+      existingLetter  = "",
+      refineInstruction = "",
     } = body
 
     const {
@@ -91,7 +94,26 @@ Deno.serve(async (req: Request) => {
     const toneHint = toneInstructions[tone] || toneInstructions.formal
 
     // ── Build user prompt ───────────────────────────────────────
-    const userPrompt = `Generate a cover letter for:
+    let userPrompt = ""
+    
+    if (refineInstruction && existingLetter) {
+      userPrompt = `Refine the following cover letter based on this specific instruction: "${refineInstruction}"
+      
+Current Letter:
+${existingLetter}
+
+Context:
+Job Title: ${jobTitle}
+Company: ${company}
+
+Tone to maintain: ${toneHint}
+
+Rules:
+- Keep the length between 250-320 words.
+- Maintain the same structure unless the instruction says otherwise.
+- Output ONLY the refined letter body text. No subject lines or headers.`
+    } else {
+      userPrompt = `Generate a cover letter for:
 Job Title: ${jobTitle}
 Company: ${company}
 Job Description: ${jobDescription ? jobDescription.slice(0, 1500) : "Not provided"}
@@ -109,6 +131,7 @@ Location: ${location}
 Required Tone: ${toneHint}
 
 Write 250-320 words. Start with a compelling hook. No headers. No "Dear Hiring Manager."`
+    }
 
     // ── Call OpenAI ─────────────────────────────────────────────
     const openAIKey = Deno.env.get("OPENAI_API_KEY")
@@ -162,8 +185,8 @@ Write 250-320 words. Start with a compelling hook. No headers. No "Dear Hiring M
       return new Response(JSON.stringify({ ok: true, data: { letter, wordCount } }), {
         status : 200,
         headers: {
+          ...CORS_HEADERS,
           "Content-Type"               : "application/json",
-          "Access-Control-Allow-Origin": "*",
         },
       })
 
@@ -186,8 +209,8 @@ function jsonError(message: string, status: number) {
   return new Response(JSON.stringify({ ok: false, error: message }), {
     status,
     headers: {
+      ...CORS_HEADERS,
       "Content-Type"               : "application/json",
-      "Access-Control-Allow-Origin": "*",
     },
   })
 }

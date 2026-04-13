@@ -30,9 +30,13 @@ export default function LoginPage() {
         setMode('login')
       } else {
         await login(email, password)
-        await loadCloudResumes()
         toast.success('Welcome back!')
-        navigate(returnTo, { replace: true })
+        // Small delay to let the store stabilize before navigation
+        setTimeout(() => {
+          navigate(returnTo, { replace: true })
+          // Load resumes in background
+          loadCloudResumes(true).catch(() => {})
+        }, 100)
       }
     } catch { /* Errors are toasted inside login/register */ }
   }
@@ -119,23 +123,41 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === 'signup' && (
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Full Name</label>
+                <label htmlFor="full-name" className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Full Name</label>
                 <div className="relative">
                   <User size={15} className="absolute left-4 top-3.5 text-gray-400" />
-                  <input className="w-full pl-11 pr-4 py-3 rounded-2xl border border-gray-200 focus:border-brand-400 focus:ring-4 focus:ring-brand-100 outline-none transition-all text-sm bg-gray-50/50 placeholder:text-gray-400" type="text" placeholder="Rahul Sharma" value={name} onChange={e => setName(e.target.value)} required />
+                  <input
+                    id="full-name"
+                    name="name"
+                    className="w-full pl-11 pr-4 py-3 rounded-2xl border border-gray-200 focus:border-brand-400 focus:ring-4 focus:ring-brand-100 outline-none transition-all text-sm bg-gray-50/50 placeholder:text-gray-400"
+                    type="text"
+                    placeholder="Rahul Sharma"
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    required
+                  />
                 </div>
               </div>
             )}
             <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Email Address</label>
+              <label htmlFor="login-email" className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Email Address</label>
               <div className="relative">
                 <Mail size={15} className="absolute left-4 top-3.5 text-gray-400" />
-                <input className="w-full pl-11 pr-4 py-3 rounded-2xl border border-gray-200 focus:border-brand-400 focus:ring-4 focus:ring-brand-100 outline-none transition-all text-sm bg-gray-50/50 placeholder:text-gray-400" type="email" placeholder="rahul@email.com" value={email} onChange={e => setEmail(e.target.value)} required />
+                <input
+                  id="login-email"
+                  name="email"
+                  className="w-full pl-11 pr-4 py-3 rounded-2xl border border-gray-200 focus:border-brand-400 focus:ring-4 focus:ring-brand-100 outline-none transition-all text-sm bg-gray-50/50 placeholder:text-gray-400"
+                  type="email"
+                  placeholder="rahul@email.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                />
               </div>
             </div>
             <div>
               <div className="flex justify-between items-center mb-2">
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Password</label>
+                <label htmlFor="login-password" className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Password</label>
                 {mode === 'login' && (
                   <button type="button" onClick={handleForgotPassword} disabled={forgotLoading}
                     className="text-xs text-brand-600 hover:underline flex items-center gap-1 disabled:opacity-60">
@@ -145,8 +167,16 @@ export default function LoginPage() {
               </div>
               <div className="relative">
                 <Lock size={15} className="absolute left-4 top-3.5 text-gray-400" />
-                <input className="w-full pl-11 pr-12 py-3 rounded-2xl border border-gray-200 focus:border-brand-400 focus:ring-4 focus:ring-brand-100 outline-none transition-all text-sm bg-gray-50/50 placeholder:text-gray-400"
-                  type={showPass ? 'text' : 'password'} placeholder="Min 8 characters" value={password} onChange={e => setPassword(e.target.value)} required />
+                <input
+                  id="login-password"
+                  name="password"
+                  className="w-full pl-11 pr-12 py-3 rounded-2xl border border-gray-200 focus:border-brand-400 focus:ring-4 focus:ring-brand-100 outline-none transition-all text-sm bg-gray-50/50 placeholder:text-gray-400"
+                  type={showPass ? 'text' : 'password'}
+                  placeholder="Min 8 characters"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                />
                 <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 top-3.5 text-gray-400 hover:text-gray-600">
                   {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -27,9 +27,14 @@ import InlineEditTitle from '../components/InlineEditTitle'
 import ExportMenu from '../components/ExportMenu'
 import AuthModal from '../components/AuthModal'
 import NextBestFixes from '../components/NextBestFixes'
+import ResumeVersionPanel from '../components/ResumeVersionPanel'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
 import { supabase } from '../services/supabase'
+import { useResponsiveScale } from '../hooks/useResponsiveScale'
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
+import { EVENT_NAMES, trackEvent } from '../services/analytics'
+import { useEntitlements } from '../utils/entitlements'
 
 // ── Section definitions with premium icons ────────────────────────
 const FORM_SECTIONS = [
@@ -181,6 +186,7 @@ export default function BuilderPage() {
   const [tailorAdvice, setTailorAdvice]   = useState(null)
   const [isTailoring, setIsTailoring]     = useState(false)
   const [tailorResult, setTailorResult]   = useState(null) // { summary, bullets, addedKeywords, tailoringScore }
+  const [showVersionPanel, setShowVersionPanel] = useState(false)
 
   // Zoom persistence
   const [previewScale, setPreviewScale] = useState(() => {
@@ -194,20 +200,38 @@ export default function BuilderPage() {
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
   // 'edit' | 'score' | 'preview'
   const [mobilePanel, setMobilePanel] = useState('edit')
+  const prevAtsTotalRef = useRef(0)
 
   const {
     resumeData, settings, atsScore, jobDescription,
     setATSScore, setJobDescription, setTemplate, setAccentColor,
-    saveResume, isDirty,
+    saveResume, cloneResume, isDirty, markAiAssistUsed,
   } = useResumeStore()
-  const { user, plan, testMode, setTestMode } = useAuthStore()
+  const { user, testMode, setTestMode } = useAuthStore()
+  const { isPro } = useEntitlements()
 
   const template        = getTemplate(settings.templateId)
   const ResumeComponent = template.component
+  const previewCanvasRef = useRef(null)
+  const [previewPageEstimate, setPreviewPageEstimate] = useState(1)
   const ActiveForm      = FORM_SECTIONS.find(s => s.id === activeSection)?.component
   const activeSecMeta   = FORM_SECTIONS.find(s => s.id === activeSection)
 
   const completeness = useMemo(() => computeCompleteness(resumeData), [resumeData])
+
+  const PREVIEW_A4_PX = 1123
+  useLayoutEffect(() => {
+    const el = previewCanvasRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const update = () => {
+      const h = el.scrollHeight
+      setPreviewPageEstimate(Math.max(1, Math.ceil(h / PREVIEW_A4_PX)))
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [resumeData, settings.templateId, settings.accentColor, ResumeComponent])
 
   // ── Save handler ──────────────────────────────────────────────
   const handleSave = useCallback(async () => {
@@ -223,6 +247,7 @@ export default function BuilderPage() {
     setIsSaving(true)
     try {
       await saveResume(resumeData.personal.fullName || 'My Resume')
+      trackEvent(EVENT_NAMES.RESUME_SAVED, { hasName: !!resumeData.personal.fullName?.trim() })
       toast.success('Resume saved to cloud!')
     } finally {
       setIsSaving(false)
@@ -253,7 +278,7 @@ export default function BuilderPage() {
       toast.error('Paste a job description first (in the Score tab).')
       return
     }
-    if (plan !== 'pro' && !testMode) {
+    if (!isPro) {
       toast.error('AI Tailoring is a Pro feature. Upgrade to unlock!')
       return
     }
@@ -302,7 +327,8 @@ export default function BuilderPage() {
       if (!json?.ok) throw new Error(json?.error || 'Tailoring failed')
 
       setTailorResult(json.data)
-      toast.success(`Resume tailored! ATS match improved to ${json.data.tailoringScore}% ✨`)
+      markAiAssistUsed()
+      toast.success(`Resume tailored! Keyword match improved to ${json.data.tailoringScore}% ✨`)
     } catch (err) {
       if (err.name === 'AbortError') {
         toast.error('Tailoring timed out. Please try again.')
@@ -312,13 +338,14 @@ export default function BuilderPage() {
     } finally {
       setIsTailoring(false)
     }
-  }, [jobDescription, resumeData, plan, testMode])
+  }, [jobDescription, resumeData, isPro])
 
   // ── PDF export handler ────────────────────────────────────────
   const handleExportPDF = useCallback(async () => {
     setIsExporting(true)
     try {
       await exportToPDF(resumeData, settings, ResumeComponent, resumeData.personal.fullName || 'resume')
+      trackEvent(EVENT_NAMES.EXPORT_PDF, { format: 'pdf', templateId: settings.templateId, source: 'builder_shortcut' })
       toast.success('PDF downloaded!')
     } catch {
       toast.error('Export failed. Please try again.')
@@ -334,11 +361,39 @@ export default function BuilderPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // ── Dashboard &quot;Tailor to job&quot; prefill ───────────────────────
+  useEffect(() => {
+    try {
+      const jd = sessionStorage.getItem('hwp-prefill-jd')
+      if (jd) {
+        setJobDescription(jd)
+        sessionStorage.removeItem('hwp-prefill-jd')
+      }
+      if (sessionStorage.getItem('hwp-open-tab') === 'ats') {
+        setActiveTab('ats')
+        sessionStorage.removeItem('hwp-open-tab')
+      }
+    } catch { /* ignore */ }
+  }, [setJobDescription])
+
   // ── ATS auto-score (1.2s debounce) ───────────────────────────
   useEffect(() => {
     const t = setTimeout(() => setATSScore(scoreResume(resumeData, jobDescription)), 1200)
     return () => clearTimeout(t)
   }, [resumeData, jobDescription])
+
+  // ── Analytics: ATS score improvement ──────────────────────────
+  useEffect(() => {
+    const current = atsScore?.total || 0
+    if (current > prevAtsTotalRef.current) {
+      trackEvent(EVENT_NAMES.ATS_SCORE_IMPROVED, {
+        previous: prevAtsTotalRef.current,
+        current,
+        delta: current - prevAtsTotalRef.current,
+      })
+    }
+    prevAtsTotalRef.current = current
+  }, [atsScore?.total])
 
   // ── Mobile resize listener ───────────────────────────────────────
   useEffect(() => {
@@ -347,16 +402,7 @@ export default function BuilderPage() {
     return () => window.removeEventListener('resize', check)
   }, [])
 
-  // ── Responsive auto-scale ─────────────────────────────────────────
-  useEffect(() => {
-    const update = () => {
-      const available = window.innerWidth - (sidebarOpen ? 420 : 0) - 64
-      setAutoScale(Math.min(0.80, Math.max(0.38, available / 794)))
-    }
-    update()
-    window.addEventListener('resize', update)
-    return () => window.removeEventListener('resize', update)
-  }, [sidebarOpen])
+  useResponsiveScale({ sidebarOpen, setAutoScale, sidebarWidth: 420 })
 
   // ── Auto-save 15s ────────────────────────────────────────────
   useEffect(() => {
@@ -372,20 +418,14 @@ export default function BuilderPage() {
     return () => window.removeEventListener('beforeunload', fn)
   }, [isDirty, handleSave])
 
-  // ── Keyboard shortcuts ────────────────────────────────────────
-  useEffect(() => {
-    const onKey = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); handleSave() }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'p') { e.preventDefault(); handleExportPDF() }
-      if (e.altKey && e.key >= '1' && e.key <= '8') {
-        e.preventDefault()
-        const idx = parseInt(e.key) - 1
-        if (FORM_SECTIONS[idx]) setActiveSection(FORM_SECTIONS[idx].id)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [handleSave, handleExportPDF])
+  useKeyboardShortcuts({
+    onSave: handleSave,
+    onExportPdf: handleExportPDF,
+    onSectionJump: (idx) => {
+      if (FORM_SECTIONS[idx]) setActiveSection(FORM_SECTIONS[idx].id)
+    },
+    maxSections: 8,
+  })
 
 
   const handleZoomChange = (val) => {
@@ -459,7 +499,8 @@ export default function BuilderPage() {
                         <div className="flex items-center gap-4">
                           <ATSRing score={atsScore} size={64} />
                           <div className="flex-1">
-                            <div className="text-xs font-black uppercase tracking-widest text-gray-400 mb-1">ATS Score</div>
+                            <div className="text-xs font-black uppercase tracking-widest text-gray-400 mb-1">Resume readiness</div>
+                            <p className="text-[9px] text-gray-400 leading-snug max-w-[14rem] mb-1">Heuristic check—not your employer&apos;s ATS.</p>
                             <div className="font-black text-2xl leading-none" style={{ color: atsScore.grade.color }}>
                               {atsScore.total} <span className="text-sm text-gray-400 font-bold">/ 118</span>
                             </div>
@@ -484,9 +525,12 @@ export default function BuilderPage() {
                       <textarea
                         className="input-field resize-none text-xs"
                         rows={4}
-                        placeholder="Paste the job description here..."
+                        placeholder="Paste the job description for keyword alignment..."
                         value={jobDescription || ''}
-                        onChange={e => setJobDescription(e.target.value)}
+                  onChange={e => {
+                    setJobDescription(e.target.value)
+                    trackEvent(EVENT_NAMES.JD_PASTED, { length: e.target.value?.length || 0, source: 'builder_mobile' })
+                  }}
                       />
                     </div>
                     <div className="flex-1 overflow-y-auto">
@@ -523,7 +567,7 @@ export default function BuilderPage() {
                           <button
                             key={t.id}
                             onClick={() => {
-                              if (t.tier === 'pro' && plan !== 'pro' && !testMode) { toast.error('Upgrade to Pro to unlock this template'); return }
+                              if (t.tier === 'pro' && !isPro) { toast.error('Upgrade to Pro to unlock this template'); return }
                               setTemplate(t.id)
                             }}
                             className={clsx(
@@ -564,12 +608,15 @@ export default function BuilderPage() {
           {mobilePanel === 'preview' && (
             <div className="h-full overflow-auto flex flex-col items-center py-6 px-4 bg-[#ECEEF3]">
               <div style={{ transform: 'scale(0.46)', transformOrigin: 'top center', width: '794px', marginBottom: `${1123 * 0.46 - 1123 + 40}px` }}>
-                <div id="resume-preview-canvas" className="resume-a4 bg-white drop-shadow-2xl">
+                <div id="resume-preview-canvas" ref={previewCanvasRef} className="resume-a4 bg-white drop-shadow-2xl">
                   <ErrorBoundary>
                     <ResumeComponent data={resumeData} settings={settings} />
                   </ErrorBoundary>
                 </div>
               </div>
+              <p className="text-center text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-3 shrink-0">
+                ~{previewPageEstimate} A4 page{previewPageEstimate === 1 ? '' : 's'} (estimate)
+              </p>
             </div>
           )}
         </div>
@@ -630,12 +677,38 @@ export default function BuilderPage() {
         style={{ width: sidebarOpen ? `${SIDEBAR_W}px` : 0 }}
       >
         {/* ── Top bar: Resume selector + title ── */}
-        <div className="flex-shrink-0 h-12 bg-gray-50/80 border-b border-gray-100 flex items-center gap-2 px-3">
+        <div className="flex-shrink-0 h-12 bg-gray-50/80 border-b border-gray-100 flex items-center gap-2 px-3 relative">
           <ResumeSelector />
           <div className="h-4 w-px bg-gray-200" />
           <div className="flex-1 min-w-0">
             <InlineEditTitle />
           </div>
+          {/* Version button */}
+          <button
+            onClick={() => setShowVersionPanel(v => !v)}
+            title="Version History & Clone"
+            className="flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+          >
+            <Layers size={11} />
+            <span>Versions</span>
+          </button>
+
+          {/* Version popover */}
+          {showVersionPanel && (
+            <>
+              {/* Backdrop */}
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setShowVersionPanel(false)}
+              />
+              <div
+                className="absolute top-full left-0 mt-2 z-50 bg-white border border-gray-200 rounded-2xl shadow-2xl p-4"
+                style={{ width: 360, maxHeight: 520, overflowY: 'auto' }}
+              >
+                <ResumeVersionPanel onClose={() => setShowVersionPanel(false)} />
+              </div>
+            </>
+          )}
         </div>
 
         {/* ── Tab bar ── */}
@@ -720,16 +793,6 @@ export default function BuilderPage() {
                   )}
                 </div>
 
-                <NextBestFixes
-                  completeness={completeness}
-                  atsScore={atsScore}
-                  onJumpToSection={(sec) => {
-                    setActiveSection(sec)
-                    const el = document.getElementById(`resume-sec-${sec}`)
-                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                  }}
-                />
-
                 {/* Completeness mini-bar */}
                 <div className="flex-shrink-0 px-4 pt-2.5 pb-1">
                   <div className="flex items-center justify-between mb-1">
@@ -771,7 +834,7 @@ export default function BuilderPage() {
                 {(
                   <div className="mx-4 my-2 flex items-center justify-between bg-gradient-to-r from-violet-50 to-indigo-50 rounded-xl px-3 py-2 border border-indigo-100/80">
                     <div className="text-[9px] font-bold text-indigo-600">Have an old resume?</div>
-                    {(plan === 'pro' || testMode)
+                    {isPro
                       ? <button onClick={() => setShowUpload(true)} className="flex items-center gap-1 px-2.5 py-1 bg-gradient-to-r from-violet-500 to-indigo-500 text-white text-[9px] font-black rounded-lg shadow-sm hover:shadow-md transition-all uppercase tracking-wider">
                           <Sparkles size={9} /> AI Parse
                         </button>
@@ -784,6 +847,17 @@ export default function BuilderPage() {
 
                 {/* Form */}
                 <div className="flex-1 p-4 overflow-y-auto">
+                  <div className="mb-3">
+                    <NextBestFixes
+                      completeness={completeness}
+                      atsScore={atsScore}
+                      onJumpToSection={(sec) => {
+                        setActiveSection(sec)
+                        const el = document.getElementById(`resume-sec-${sec}`)
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                      }}
+                    />
+                  </div>
                   {ActiveForm && <ActiveForm />}
                 </div>
               </div>
@@ -799,7 +873,8 @@ export default function BuilderPage() {
                   <div className="flex items-center gap-4">
                     <ATSRing score={atsScore} size={64} />
                     <div className="flex-1">
-                      <div className="text-xs font-black uppercase tracking-widest text-gray-400 mb-1">ATS Score</div>
+                      <div className="text-xs font-black uppercase tracking-widest text-gray-400 mb-1">Resume readiness</div>
+                      <p className="text-[9px] text-gray-400 leading-snug mb-1">Heuristic check—not your employer&apos;s ATS.</p>
                       <div className="font-black text-2xl leading-none text-white" style={{ color: atsScore.grade.color }}>
                         {atsScore.total} <span className="text-sm text-gray-400 font-bold">/ 118</span>
                       </div>
@@ -829,9 +904,12 @@ export default function BuilderPage() {
                 <textarea
                   className="input-field resize-none text-xs"
                   rows={4}
-                  placeholder="Paste the job description here to get a role-specific ATS score..."
+                  placeholder="Paste the job description for keyword alignment and a tailored readiness score..."
                   value={jobDescription || ''}
-                  onChange={e => setJobDescription(e.target.value)}
+                  onChange={e => {
+                    setJobDescription(e.target.value)
+                    trackEvent(EVENT_NAMES.JD_PASTED, { length: e.target.value?.length || 0, source: 'builder_desktop' })
+                  }}
                 />
               </div>
 
@@ -870,7 +948,7 @@ export default function BuilderPage() {
                         : <><Sparkles size={11} /> ✨ Tailor Resume for This Job</>
                       }
                     </button>
-                    {plan !== 'pro' && !testMode && (
+                    {!isPro && (
                       <p className="text-center text-[8px] text-gray-400 mt-1">Pro feature · <Link to="/upgrade" className="text-brand-500 font-bold hover:underline">Upgrade</Link></p>
                     )}
                   </div>
@@ -917,7 +995,7 @@ export default function BuilderPage() {
                     <button
                       key={t.id}
                       onClick={() => {
-                        if (t.tier === 'pro' && plan !== 'pro' && !testMode) {
+                        if (t.tier === 'pro' && !isPro) {
                           if (!user) {
                             setAuthTrigger('pro')
                             setShowAuthModal(true)
@@ -961,7 +1039,7 @@ export default function BuilderPage() {
               {/* Accent color picker */}
               <div>
                 <h3 className="label text-[9px] mb-3">Accent Color</h3>
-                {(plan === 'pro' || testMode) ? (
+                {isPro ? (
                   <div>
                     <div className="flex flex-wrap gap-2 mb-3">
                       {ACCENT_COLORS.map(c => (
@@ -1080,7 +1158,7 @@ export default function BuilderPage() {
               exit={{ opacity: 0, y: -8 }}
               className="flex items-center gap-3 mb-5 bg-white/90 backdrop-blur-xl rounded-full px-5 py-2 shadow-md border border-white/20 text-xs"
             >
-              <span className="font-bold text-gray-400 uppercase tracking-widest text-[9px]">ATS Score</span>
+              <span className="font-bold text-gray-400 uppercase tracking-widest text-[9px]">Readiness</span>
               <span className="font-black text-xl leading-none" style={{ color: atsScore.grade.color }}>{atsScore.total}</span>
               <div
                 className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider"
@@ -1115,21 +1193,32 @@ export default function BuilderPage() {
           }}
           className="relative drop-shadow-2xl"
         >
-          {/* Page break visual guides */}
-          {[1123, 2246, 3369].map(top => (
-            <div
-              key={top}
-              className="resume-page-break-visual"
-              style={{ position: 'absolute', top: `${top}px`, left: 0, zIndex: 10, pointerEvents: 'none' }}
-            />
-          ))}
+          {/* Page break visual guides (56px bottom + 72px top gap) */}
+          {[1, 2, 3].map(page => {
+            const boundaryY = page * 1123
+            return (
+              <div
+                key={page}
+                className="resume-page-break-visual"
+                style={{ position: 'absolute', top: `${boundaryY - 56}px`, left: 0, zIndex: 10, pointerEvents: 'none' }}
+              >
+                <div className="resume-page-boundary-line" />
+                <div className="text-[10px] font-black text-slate-300 uppercase tracking-tighter opacity-50">
+                  PAGE {page} | PAGE {page + 1}
+                </div>
+              </div>
+            )
+          })}
 
-          <div id="resume-preview-canvas" className="resume-a4 bg-white">
+          <div id="resume-preview-canvas" ref={previewCanvasRef} className="resume-a4 bg-white">
             <ErrorBoundary>
               <ResumeComponent data={resumeData} settings={settings} />
             </ErrorBoundary>
           </div>
         </motion.div>
+        <p className="text-center text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-3">
+          ~{previewPageEstimate} A4 page{previewPageEstimate === 1 ? '' : 's'} (estimate)
+        </p>
       </div>
 
       {/* ═════ Zoom controls (fixed bottom-right) ════════════════ */}

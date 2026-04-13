@@ -17,6 +17,8 @@ export default function CLClassic({ data = {} }) {
     jobTitle = '',
     letter = '',
     accentColor = '#1A56DB',
+    isEditing = false,
+    onLetterChange = () => {},
   } = data
 
   return (
@@ -63,8 +65,33 @@ export default function CLClassic({ data = {} }) {
       </div>
 
       {/* Letter body */}
-      <div style={{ whiteSpace: 'pre-wrap', color: '#374151', lineHeight: 1.75 }}>
-        {letter || '[Your cover letter will appear here after generation]'}
+      <div style={{ position: 'relative' }}>
+        {isEditing ? (
+          <textarea
+            value={letter}
+            onChange={(e) => onLetterChange(e.target.value)}
+            placeholder=""
+            className="w-full bg-transparent border-none focus:ring-0 p-0 resize-none overflow-hidden"
+            style={{
+              fontFamily: 'inherit',
+              fontSize: 'inherit',
+              lineHeight: 'inherit',
+              color: '#374151',
+              minHeight: '400px',
+              width: '100%',
+              outline: 'none',
+              whiteSpace: 'pre-wrap',
+            }}
+            onInput={(e) => {
+              e.target.style.height = 'auto';
+              e.target.style.height = e.target.scrollHeight + 'px';
+            }}
+          />
+        ) : (
+          <div style={{ whiteSpace: 'pre-wrap', color: '#374151', lineHeight: 1.75 }}>
+            {letter || '[Your cover letter will appear here after generation]'}
+          </div>
+        )}
       </div>
 
       {/* Sign-off */}

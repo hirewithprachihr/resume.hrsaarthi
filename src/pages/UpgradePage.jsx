@@ -9,7 +9,7 @@
  *  5. Already Pro → show Pro dashboard link
  */
 import { useState, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   CheckCircle2, Zap, Star, Download, Sparkles, Palette,
@@ -21,6 +21,7 @@ import { useResumeStore } from '../store/resumeStore'
 import { supabase } from '../services/supabase'
 import AuthModal from '../components/AuthModal'
 import toast from 'react-hot-toast'
+import { useEntitlements } from '../utils/entitlements'
 
 const RAZORPAY_KEY = import.meta.env.VITE_RAZORPAY_KEY_ID
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
@@ -93,21 +94,25 @@ export default function UpgradePage() {
 
   const { user, plan, upgradeToPro } = useAuthStore()
   const { resumeData }               = useResumeStore()
-  const navigate                     = useNavigate()
+  const { isPro, launchOfferActive } = useEntitlements()
 
   // Prefetch Razorpay on mount
   useEffect(() => { loadRazorpay() }, [])
 
   // Already Pro
-  if (plan === 'pro') {
+  if (isPro) {
     return (
       <div className="min-h-[80vh] flex flex-col items-center justify-center text-center px-4 py-16">
         <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
           <div className="w-20 h-20 bg-gradient-to-br from-amber-400 to-orange-500 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-amber-200">
             <Crown size={36} className="text-white" />
           </div>
-          <h1 className="text-3xl font-black text-gray-900 mb-3">You're a Pro! 🎉</h1>
-          <p className="text-gray-500 mb-8 max-w-sm mx-auto">All Pro features are unlocked. Go build something amazing.</p>
+          <h1 className="text-3xl font-black text-gray-900 mb-3">{launchOfferActive && plan !== 'pro' ? "30-Day Pro Trial Active! 🎉" : "You're a Pro! 🎉"}</h1>
+          <p className="text-gray-500 mb-8 max-w-sm mx-auto">
+            {launchOfferActive && plan !== 'pro'
+              ? 'All Pro features are unlocked during the launch trial. Build and export without restrictions.'
+              : 'All Pro features are unlocked. Go build something amazing.'}
+          </p>
           <div className="flex gap-3 justify-center">
             <Link to="/builder" className="px-6 py-3 bg-gray-900 text-white font-bold rounded-2xl hover:bg-gray-800 transition-colors flex items-center gap-2">
               <FileText size={16} /> Open Builder

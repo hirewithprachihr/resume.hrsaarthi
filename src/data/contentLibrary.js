@@ -195,7 +195,134 @@ export const BULLET_TEMPLATES = {
     'Conducted interviews with 25 customers for testimonial content, contributing to 15% sales page lift',
     'Built content repository of 500+ reusable assets reducing new content creation time by 30%',
   ],
+
+  'Doctor': [
+    'Managed OPD of 40+ patients daily in a 500-bed tertiary care hospital with 98% patient satisfaction',
+    'Performed 200+ laparoscopic surgeries with zero major intra-operative complications in FY24',
+    'Reduced average patient waiting time from 45 mins to 18 mins through triage protocol redesign',
+    'Conducted 15+ CME sessions for resident doctors and nursing staff on evidence-based protocols',
+    'Published 3 peer-reviewed papers in indexed journals (PubMed/Scopus) on surgical outcomes',
+    'Achieved 95% adherence to antibiotic stewardship protocols, reducing resistance rate by 22%',
+    'Mentored 8 postgraduate medical students, with 100% first-attempt NBEMS pass rate',
+    'Led COVID-19 ICU team managing 60+ critical patients; reduced mortality rate by 18% vs hospital average',
+    'Implemented electronic medical records (EMR) adoption across 3 wards, reducing documentation errors by 60%',
+    'Completed DNB/MD with 85%+ percentile in PGI/AIIMS entrance — research dissertation rated Excellent',
+    'Managed multidisciplinary tumor board discussions for 25+ oncology cases per month',
+    'Reduced post-operative infection rate from 4.2% to 1.8% through enhanced aseptic protocol training',
+    'Delivered 500+ teleconsultations during pandemic ensuring continuity of care for chronic patients',
+    'Obtained MCI/NMC registration (Reg. No. XXXXX) — active license, no disciplinary action',
+    'Coordinated with insurance providers for cashless claims processing for 200+ patients monthly',
+  ],
+
+  'Advocate': [
+    'Appeared in 120+ cases before District Courts, High Court, and NCDRC in FY24 with 78% success rate',
+    'Drafted and reviewed 200+ commercial contracts, JVAs, and NDAs for corporate clients across 5 sectors',
+    'Represented company in arbitration proceedings saving ₹3.5Cr in disputed amounts',
+    'Filed and obtained 15 trademarks and 8 patents for technology and FMCG clients within 90-day timelines',
+    'Led due diligence for 3 M&A transactions cumulatively valued at ₹120Cr',
+    'Argued 6 cases before High Court on IP infringement and consumer protection matters',
+    'Structured legal framework for ESOP plan covering 800+ employees in compliance with SEBI regulations',
+    'Advised on FEMA, RBI, and SEBI compliance for 5 FDI transactions worth USD 50M+',
+    'Managed contract lifecycle management system for portfolio of 500+ active vendor agreements',
+    'Conducted legal audit for 3 group companies identifying 12 compliance gaps and 6 litigation risks',
+    'Drafted constitutional writ petitions challenging regulatory orders; 2 of 4 decisions were favorable',
+    'Negotiated settlement in labor dispute involving 120 employees, reducing company liability by ₹80L',
+    'Enrolled with Bar Council of [State] — 10+ years standing with zero professional misconduct complaints',
+    'Represented clients in 20+ RERA matters related to real estate project delays and refund disputes',
+    'Built and managed client database of 150+ individuals and corporate entities with CRM system',
+  ],
+
+  'Teacher': [
+    'Taught Mathematics / Science / English to 200+ students across Grades 6–12 with 95% board pass rate',
+    'Improved average class score from 62% to 81% over 2 academic years through targeted intervention',
+    'Developed 150+ lesson plans aligned with CBSE/ICSE/State Board curriculum and NEP 2020 guidelines',
+    'Mentored 12 students selected for National Science Olympiad and Mathematics Olympiad state round',
+    'Introduced activity-based learning for 3 subjects, reducing absenteeism by 30% and improving engagement',
+    'Prepared 30+ students for JEE/NEET foundation with 85% qualifying IIT/NEET coaching level tests',
+    'Designed online course on Vedantu/BYJU\'s platform — 5,000+ enrolled students, 4.7/5 rating',
+    'Coordinated school science fair with 60+ student projects and 3 state-level prize winners',
+    'Served as class teacher for 45 students handling attendance, academic counseling, and parent communication',
+    'Conducted remedial classes for 20 underperforming students; 18 showed 15%+ grade improvement',
+    'Trained 10 new teachers in digital tools (Google Classroom, Kahoot, Canva for Education)',
+    'Published curriculum resource pack used by 8 schools across the district for Maths formative assessment',
+    'Led school\'s CBSE accreditation review and prepared compliance documentation achieving Grade A',
+    'Implemented student learning outcome (SLO) tracking system across 4 sections',
+    'Organized annual inter-school debate and quiz competitions with 500+ student participants',
+  ],
+
+  'Government Officer': [
+    'Administered 12 government schemes with total beneficiary coverage of 50,000+ citizens in district',
+    'Led land records digitization project covering 1,80,000 khasra entries within 8-month timeline',
+    'Resolved 800+ citizen grievances through CM Helpline and NIC portal within 30-day SLA mandate',
+    'Conducted 25 gram sabhas and 4 jan sunwais ensuring stakeholder consultation for development projects',
+    'Managed district treasury operations with zero audit objections in 3 consecutive annual audits',
+    'Supervised construction of 12 government buildings and 45km road projects under PMGSY',
+    'Coordinated state government response during flood relief — managed ₹8Cr disaster relief fund',
+    'Achieved 98% Aadhaar seeding for beneficiaries under 3 DBT schemes in block jurisdiction',
+    'Led digitization of 50 years of court records under e-Courts Mission Mode Project',
+    'Reduced average file processing time from 15 days to 6 days through SOP redesign and staff training',
+    'Prepared and submitted 20+ policy notes and cabinet memos with accurate data and analysis',
+    'Trained 150+ field staff in PFMS, GeM, and NIC tools for e-governance compliance',
+    'Coordinated with 8 departments for implementation of Smart City Mission projects worth ₹120Cr',
+    'Achieved 100% utilization of MGNREGS budget in jurisdiction for FY23 — zero lapse or surrender',
+    'Resolved inter-departmental land dispute within 45 days through structured mediation process',
+  ],
+
+  'HR Manager': [
+    'Built HR function from scratch for 200-person startup — developed all policies, frameworks, and HRIS',
+    'Reduced attrition from 28% to 14% through structured retention programs, skip-level connects, and ESAT surveys',
+    'Hired 80+ employees in 4 months for Series B expansion across sales, tech, and operations functions',
+    'Rolled out OKR framework across 6 departments, improving quarterly goal achievement by 35%',
+    'Launched POSH policy, trained 600+ employees, constituted IC Committee with 100% compliance',
+    'Implemented Darwinbox HRIS eliminating 18 manual processes and reducing HR admin effort by 40%',
+    'Designed and executed L&D roadmap covering 1,200 training hours per year for 150 employees',
+    'Built employer brand strategy that reduced cost-per-hire by 25% through LinkedIn and campus channels',
+    'Conducted 3 HR audits ensuring PF, ESIC, PT, Gratuity, and Shops & Establishment compliance',
+    'Partnered with 5 business heads to design competency frameworks and structured career ladders',
+    'Launched quarterly pulse surveys; implemented 12 action items resulting in 22-point eNPS improvement',
+    'Managed annual appraisal cycle for 300+ employees — designed moderation process reducing manager bias',
+    'Sourced and onboarded 5 C-suite executives (CHRO, CTO, CFO) through retained search approach',
+    'Built diversity hiring program resulting in 35% women representation in engineering team (up from 18%)',
+    'Deployed AI-based resume screening tool reducing initial shortlisting time by 65%',
+  ],
+
+  'Sales Manager': [
+    'Led and managed team of 15 field sales executives across 4 cities, achieving 132% of annual team target',
+    'Built territory sales strategy for North India, expanding client base from 120 to 380 accounts in 18 months',
+    'Designed incentive structure for 50-person sales team improving average quota attainment from 85% to 112%',
+    'Closed ₹4.5Cr strategic deal with largest enterprise client — 24-month implementation contract',
+    'Reduced sales cycle from 75 days to 40 days through introduction of ROI-based selling toolkit',
+    'Built and led inside sales team of 8; scaled outbound pipeline from ₹1Cr to ₹6Cr in 9 months',
+    'Onboarded and trained 18 new sales hires; 15 of 18 achieved 100%+ quota in ramp quarter',
+    'Represented company at 8 industry events (NASSCOM, SaaS Boomi, CII) generating 200+ new leads',
+    'Implemented Salesforce CRM for team of 20 — improved data hygiene, pipeline visibility, and forecast accuracy by 40%',
+    'Established channel partner network of 25 resellers contributing 30% of regional revenue',
+    'Achieved highest Net Promoter Score (NPS) in regional team for 3 consecutive quarters (NPS: 72)',
+    'Won back 5 churned enterprise clients worth ₹1.2Cr ARR through structured win-back strategy',
+    'Negotiated multi-year contract renewals with enterprise clients protecting ₹8Cr ARR annually',
+    'Developed competitive battlecards and objection-handling frameworks adopted by national sales team',
+    'Led pilot for AI-sales assistant tool reducing time-on-admin by 2 hours/rep/day across 12-person team',
+  ],
+
+  'Digital Marketing': [
+    'Generated ₹2.5Cr in attributed revenue through integrated performance marketing campaigns on Google and Meta',
+    'Reduced customer acquisition cost (CAC) by 42% through funnel optimization and audience segmentation',
+    'Grew organic traffic from 80K to 450K monthly sessions through technical SEO and content strategy',
+    'Managed ₹1.2Cr monthly ad budget across 4 platforms with average ROAS of 4.8x',
+    'Built email automation sequences converting 18% of leads to paying customers in 14-day nurture window',
+    'Grew Instagram from 12K to 250K followers in 10 months through creator collaborations and content calendar',
+    'Launched 20+ A/B tests on landing pages improving average conversion rate from 2.1% to 4.6%',
+    'Managed affiliate marketing program with 500+ partners generating ₹60L in monthly attributed revenue',
+    'Launched WhatsApp marketing channel reaching 1.5L users with 52% open rate — 3x vs email',
+    'Implemented GA4 + GTM setup for 5 products enabling granular conversion tracking and attribution',
+    'Led video content strategy — 30 reels/shorts per month averaging 200K organic views each',
+    'Executed IPL/festive season campaign reaching 5M+ impressions with ₹0.35 cost per reach',
+    'Secured 3 brand partnership deals worth ₹15L combined value through PR and influencer outreach',
+    'Built SEO content cluster strategy — 45 pillar pages ranking page 1 for high-intent transactional keywords',
+    'Improved email deliverability from 72% to 96% through list hygiene, domain authentication, and content audit',
+  ],
 }
+
 
 // ── Summary Templates ─────────────────────────────────────────────
 
@@ -260,7 +387,50 @@ export const SUMMARY_TEMPLATES = {
     'Creative and data-driven content professional with {{yearsExp}} years producing high-performing content across blogs, social, email, and video. Skilled in {{topSkill1}} and editorial management. Recently {{achievement}}.',
     'Versatile content writer with {{yearsExp}}+ years creating engaging content for Indian and global audiences across tech, finance, and lifestyle verticals. Strong in SEO, brand voice, and performance content.',
   ],
+
+  'Doctor': [
+    'Medical professional with {{yearsExp}}+ years of clinical experience specializing in {{topSkill1}}. Proven track record of managing high-volume OPD and complex surgical cases at {{company}} with exceptional patient outcomes.',
+    'MBBS/MD doctor with {{yearsExp}} years of hands-on clinical and surgical experience. Skilled in {{topSkill1}} with research publications in indexed journals. NMC registered with active license.',
+    'Compassionate and evidence-driven clinician with {{yearsExp}}+ years in tertiary care settings. Expertise in {{topSkill1}} and {{topSkill2}}, with a focus on teaching and mentoring postgraduate residents.',
+  ],
+
+  'Advocate': [
+    'Practicing advocate with {{yearsExp}}+ years of litigation and transactional experience across commercial, IP, and employment law. Appeared before High Courts and NCDRC. Strong in {{topSkill1}} and contract drafting.',
+    'Corporate counsel with {{yearsExp}} years advising startups and enterprises on M&A, SEBI compliance, and FEMA regulations. Skilled in {{topSkill1}} and deal structuring. Recently {{achievement}}.',
+    'Results-oriented legal professional with {{yearsExp}}+ years of experience in {{topSkill1}} and {{topSkill2}}. Known for meticulous drafting, strategic litigation, and consistently delivering favorable client outcomes.',
+  ],
+
+  'Teacher': [
+    'Dedicated educator with {{yearsExp}}+ years of teaching experience in {{topSkill1}} for Grades 6–12. Improved average class scores by 20%+ through activity-based learning, personalized mentoring, and structured assessments.',
+    'Passionate teacher and curriculum developer with {{yearsExp}} years experience in CBSE/ICSE institutions. Expert in {{topSkill1}} and innovative pedagogy aligned with NEP 2020 guidelines. Recently {{achievement}}.',
+    'Academic professional with {{yearsExp}}+ years in secondary and higher education. Strong in {{topSkill1}}, student mentorship, and building collaborative learning environments that produce consistent board toppers.',
+  ],
+
+  'Government Officer': [
+    'IAS/IPS/IRS/State Service officer with {{yearsExp}}+ years of field administration experience in rural and urban governance, scheme implementation, and inter-departmental coordination. Administered ₹ Cr budgets with full audit compliance.',
+    'Public servant with {{yearsExp}} years of proven track record in {{topSkill1}}, district administration, and citizen-centric service delivery. Recently {{achievement}} — recognized by [State Government / Ministry].',
+    'Detail-oriented government officer with {{yearsExp}}+ years in policy implementation, revenue administration, and e-governance. Skilled in {{topSkill1}} and driving systemic reforms under NIC/GeM/PFMS frameworks.',
+  ],
+
+  'HR Manager': [
+    'Strategic HR leader with {{yearsExp}}+ years of experience building people functions from scratch and scaling them for growth-stage companies. Expert in {{topSkill1}} and employer branding. Reduced attrition by 14% at {{company}}.',
+    'CHRO-track HR Business Partner with {{yearsExp}} years of experience in full-spectrum HR across talent acquisition, L&D, and organizational design. Known for data-driven people decisions and building high-performance cultures.',
+    'HR Manager with {{yearsExp}}+ years driving talent strategy for {{topSkill1}} domains. Passionate about building workplaces where people grow fast. Recently {{achievement}}.',
+  ],
+
+  'Sales Manager': [
+    'Sales leader with {{yearsExp}}+ years of consistently building and scaling revenue teams. Led 15+ person sales organization to 132% annual quota at {{company}}. Expert in {{topSkill1}} and enterprise deal management.',
+    'Revenue-focused Sales Manager with {{yearsExp}} years specializing in B2B SaaS, consultative selling, and territory expansion. Skilled in {{topSkill1}} and CRM discipline. Recently {{achievement}}.',
+    'High-performing sales professional and people manager with {{yearsExp}}+ years building pipelines and closing 6-figure deals. Expert in {{topSkill1}}, channel partnerships, and competitive positioning.',
+  ],
+
+  'Digital Marketing': [
+    'Performance marketing expert with {{yearsExp}}+ years delivering measurable ROI across Google, Meta, and programmatic channels. Average ROAS of 4x+ on managed budgets. Skilled in {{topSkill1}} and {{topSkill2}}.',
+    'Data-driven digital marketer with {{yearsExp}} years specializing in {{topSkill1}}, SEO, and full-funnel growth strategy. Grew organic traffic by 5x and reduced CAC by 40%+ at {{company}}. Recently {{achievement}}.',
+    'Integrated marketing strategist with {{yearsExp}}+ years driving brand growth and demand generation across digital channels for D2C and B2B brands. Strong in content marketing, paid media, and marketing automation.',
+  ],
 }
+
 
 /**
  * Get bullet suggestions for a given job title.

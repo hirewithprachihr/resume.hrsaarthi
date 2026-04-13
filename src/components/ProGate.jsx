@@ -1,10 +1,29 @@
 import { Link } from 'react-router-dom'
 import { Lock, Star, Zap } from 'lucide-react'
 import { useEntitlements } from '../utils/entitlements'
+import { EVENT_NAMES, trackEvent } from '../services/analytics'
 
-export default function ProGate({ children, feature = 'This feature' }) {
+export default function ProGate({ children, feature = 'This feature', compact = false }) {
   const { isPro } = useEntitlements()
   if (isPro) return children
+
+  if (compact) {
+    return (
+      <div className="inline-flex items-center gap-2">
+        <div className="opacity-60 select-none">
+          {children}
+        </div>
+        <Link
+          to="/upgrade"
+          onClick={() => trackEvent(EVENT_NAMES.UPGRADE_CLICK, { source: 'pro_gate_compact', feature })}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-amber-300 bg-amber-50 text-amber-700 text-[10px] font-black uppercase tracking-wider hover:bg-amber-100 transition-colors"
+        >
+          <Lock size={10} />
+          Pro
+        </Link>
+      </div>
+    )
+  }
 
   return (
     <div className="relative">
@@ -18,7 +37,11 @@ export default function ProGate({ children, feature = 'This feature' }) {
           </div>
           <h3 className="font-semibold text-gray-900 mb-1">{feature} is Pro</h3>
           <p className="text-xs text-gray-500 mb-4">Upgrade to unlock AI-powered features</p>
-          <Link to="/upgrade" className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-400 to-orange-400 text-white text-sm font-bold rounded-xl hover:shadow-md transition-all">
+          <Link
+            to="/upgrade"
+            onClick={() => trackEvent(EVENT_NAMES.UPGRADE_CLICK, { source: 'pro_gate', feature })}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-400 to-orange-400 text-white text-sm font-bold rounded-xl hover:shadow-md transition-all"
+          >
             <Star size={14} fill="white" />Upgrade — ₹149/mo
           </Link>
         </div>

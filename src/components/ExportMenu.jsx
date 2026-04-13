@@ -10,7 +10,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { Download, ChevronDown, FileText, Printer, Loader, Lock, Star, LogIn, Share2, Globe, Copy, Check } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { clsx } from 'clsx'
-import { exportToPDF } from '../utils/pdfExporter'
+import { exportToPDF, printResumeWithComponent } from '../utils/pdfExporter'
 import { exportToDocx } from '../utils/docxExporter'
 import { useResumeStore } from '../store/resumeStore'
 import { useAuthStore } from '../store/authStore'
@@ -18,6 +18,8 @@ import { Link } from 'react-router-dom'
 import AuthModal from './AuthModal'
 import toast from 'react-hot-toast'
 import { getEntitlements } from '../utils/entitlements'
+import ExportAttestationModal from './ExportAttestationModal'
+import { EVENT_NAMES, trackEvent } from '../services/analytics'
 
 export default function ExportMenu({ ResumeComponent }) {
   const [open, setOpen]           = useState(false)
@@ -27,7 +29,10 @@ export default function ExportMenu({ ResumeComponent }) {
   const [pendingAction, setPendingAction] = useState(null) // 'pdf' | 'print'
 
   const ref = useRef(null)
-  const { resumeData, settings, activeResumeId, savedResumes, togglePublic } = useResumeStore()
+  const {
+    resumeData, settings, activeResumeId, savedResumes, togglePublic,
+    aiAssistPendingAttestation, acknowledgeAiAssistAttestation,
+  } = useResumeStore()
   const { plan, testMode, user } = useAuthStore()
   const { isPro, isGuest } = getEntitlements({ plan, testMode, user })
   const isLoading = exporting !== null
@@ -35,6 +40,8 @@ export default function ExportMenu({ ResumeComponent }) {
   const activeResume = savedResumes.find(r => r.id === activeResumeId)
   const isPublic     = activeResume?.isPublic || false
   const [copied, setCopied] = useState(false)
+  const [showAttest, setShowAttest] = useState(false)
+  const [pendingExport, setPendingExport] = useState(null) // null | 'pdf' | 'docx' | 'print'
 
   // Close on outside click
   useEffect(() => {
@@ -53,6 +60,7 @@ export default function ExportMenu({ ResumeComponent }) {
         resumeData.personal.fullName || 'resume',
         isPro  // ← pass isPro so free users get watermark
       )
+      trackEvent(EVENT_NAMES.EXPORT_PDF, { source: 'export_menu' })
       if (!isPro) {
         toast.success('PDF downloaded! 📌 Free plan — watermark added. Upgrade to remove it.')
       } else {
@@ -66,17 +74,61 @@ export default function ExportMenu({ ResumeComponent }) {
     }
   }, [resumeData, settings, ResumeComponent, isPro])
 
+  const doPrint = useCallback(async () => {
+    setOpen(false)
+    setExporting('print')
+    try {
+      await printResumeWithComponent(ResumeComponent, resumeData, settings)
+    } catch (err) {
+      console.error('[ExportMenu] Print error:', err)
+      toast.error(err?.message || 'Print failed. Allow pop-ups and try again.')
+    } finally {
+      setExporting(null)
+    }
+  }, [ResumeComponent, resumeData, settings])
+
   // ── Auth gate wrapper ─────────────────────────────────────────
   const handlePDF = () => {
     if (isGuest) {
-      // Store the action, show auth modal
       setPendingAction('pdf')
       setShowAuthModal(true)
       setOpen(false)
-    } else {
-      doPDF()
+      return
     }
+    if (aiAssistPendingAttestation) {
+      setOpen(false)
+      setPendingExport('pdf')
+      setShowAttest(true)
+      return
+    }
+    doPDF()
   }
+
+  const confirmAttestedExport = () => {
+    acknowledgeAiAssistAttestation()
+    setShowAttest(false)
+    const kind = pendingExport
+    setPendingExport(null)
+    if (kind === 'pdf') doPDF()
+    if (kind === 'docx') runDocxExport()
+    if (kind === 'print') doPrint()
+  }
+
+  const runDocxExport = useCallback(async () => {
+    if (!isPro) return
+    setOpen(false)
+    setDocxLoading(true)
+    try {
+      await exportToDocx(resumeData, settings)
+      trackEvent(EVENT_NAMES.EXPORT_DOCX, { source: 'export_menu' })
+      toast.success('DOCX downloaded!')
+    } catch (err) {
+      console.error('[ExportMenu] DOCX error:', err)
+      toast.error('DOCX export failed. Please try again.')
+    } finally {
+      setDocxLoading(false)
+    }
+  }, [resumeData, settings, isPro])
 
   const handlePrint = () => {
     setOpen(false)
@@ -85,14 +137,33 @@ export default function ExportMenu({ ResumeComponent }) {
       setShowAuthModal(true)
       return
     }
-    window.print()
+    if (aiAssistPendingAttestation) {
+      setPendingExport('print')
+      setShowAttest(true)
+      return
+    }
+    doPrint()
   }
 
   // Called after successful auth in modal
   const handleAuthSuccess = () => {
     setShowAuthModal(false)
-    if (pendingAction === 'pdf')   doPDF()
-    if (pendingAction === 'print') window.print()
+    if (pendingAction === 'pdf') {
+      if (useResumeStore.getState().aiAssistPendingAttestation) {
+        setPendingExport('pdf')
+        setShowAttest(true)
+      } else {
+        doPDF()
+      }
+    }
+    if (pendingAction === 'print') {
+      if (useResumeStore.getState().aiAssistPendingAttestation) {
+        setPendingExport('print')
+        setShowAttest(true)
+      } else {
+        doPrint()
+      }
+    }
     setPendingAction(null)
   }
 
@@ -169,7 +240,7 @@ export default function ExportMenu({ ResumeComponent }) {
                   <div className="text-sm font-bold text-gray-800">Download PDF</div>
                   {!isPro && !isGuest
                     ? <div className="text-[10px] text-amber-500 font-bold">Free tier — watermark included · <Link to="/upgrade" className="underline" onClick={() => setOpen(false)}>Remove →</Link></div>
-                    : <div className="text-[10px] text-gray-400 font-medium">ATS-safe · A4 format</div>
+                    : <div className="text-[10px] text-gray-400 font-medium">Print-ready · A4 format</div>
                   }
                 </div>
                 {isGuest && <Lock size={12} className="text-gray-300 flex-shrink-0" />}
@@ -178,19 +249,15 @@ export default function ExportMenu({ ResumeComponent }) {
               {/* DOCX option (Pro) */}
               <button
                 disabled={!isPro || docxLoading}
-                onClick={async () => {
+                onClick={() => {
                   if (!isPro) { toast.error('DOCX export is a Pro feature — upgrade to unlock'); setOpen(false); return }
-                  setOpen(false)
-                  setDocxLoading(true)
-                  try {
-                    await exportToDocx(resumeData, settings)
-                    toast.success('DOCX downloaded!')
-                  } catch (err) {
-                    console.error('[ExportMenu] DOCX error:', err)
-                    toast.error('DOCX export failed. Please try again.')
-                  } finally {
-                    setDocxLoading(false)
+                  if (aiAssistPendingAttestation) {
+                    setOpen(false)
+                    setPendingExport('docx')
+                    setShowAttest(true)
+                    return
                   }
+                  runDocxExport()
                 }}
                 className={clsx(
                   'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all text-left',
@@ -302,6 +369,12 @@ export default function ExportMenu({ ResumeComponent }) {
           onSuccess={handleAuthSuccess}
         />
       )}
+
+      <ExportAttestationModal
+        open={showAttest}
+        onCancel={() => { setShowAttest(false); setPendingExport(null) }}
+        onConfirm={confirmAttestedExport}
+      />
     </div>
   )
 }

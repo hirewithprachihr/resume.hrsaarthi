@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware'
 import toast from 'react-hot-toast'
 import {
   signIn, signUp, signOut,
-  getProfile, updatePlan,
+  getProfile, updatePlan, getSession,
   onAuthStateChange, supabase
 } from '../services/supabase'
 
@@ -14,6 +14,7 @@ export const useAuthStore = create(
   persist(
     (set, get) => ({
       user        : null,
+      accessToken : null,       // CACHED JWT for AI services
       plan        : 'free',
       planExpiry  : null,       // ISO timestamp — when current Pro period ends
       subscriptionId: null,     // Razorpay subscription ID
@@ -31,46 +32,47 @@ export const useAuthStore = create(
       // Restores session from Supabase cookies & subscribes to changes
       initAuth: () => {
         const { _handleSession } = get()
-
-        // Unsubscribe previous listener if re-initialized
         if (_authSubscription) { _authSubscription.unsubscribe(); _authSubscription = null }
 
-        // Explicitly check session immediately to prevent infinite isAuthLoading
-        // (sometimes onAuthStateChange misses the INITIAL_SESSION event)
-        supabase.auth.getSession().then(async ({ data: { session } }) => {
-          if (session?.user) {
-            await _handleSession(session.user)
-          } else {
-            set({ user: null, plan: 'free', isAuthLoading: false })
-          }
-          set({ isAuthLoading: false })
-        })
+        // Use already-imported getSession — no dynamic import needed
+        getSession()
+            .then(async ({ data: { session } }) => {
+              if (session?.user) {
+                await _handleSession(session.user, session)
+              } else {
+                set({ user: null, accessToken: null, plan: 'free', isAuthLoading: false })
+              }
+            })
+            .catch(() => set({ isAuthLoading: false }))
 
         const { data: { subscription } } = onAuthStateChange(async (event, session) => {
           if (event === 'SIGNED_OUT') {
-            set({ user: null, plan: 'free', isAuthLoading: false })
+            set({ user: null, accessToken: null, plan: 'free', isAuthLoading: false })
           } else if (session?.user) {
-            await _handleSession(session.user)
+            await _handleSession(session.user, session)
+          } else if (event === 'TOKEN_REFRESHED' && session) {
+            set({ accessToken: session.access_token })
+          } else {
+            set({ isAuthLoading: false })
           }
-          set({ isAuthLoading: false })
         })
+        _authSubscription = subscription
 
         // Store at module level — NOT in Zustand state
         _authSubscription = subscription
       },
 
       // Internal: fetch profile & set user + plan
-      _handleSession: async (authUser) => {
+      _handleSession: async (authUser, session = null) => {
+        // Prevent concurrent session handling
+        if (get()._isHandlingSession) return
+        set({ _isHandlingSession: true })
+
         try {
           const profile = await getProfile(authUser.id)
-          // Check if subscription has expired
           const planExpiry = profile.plan_expires_at ? new Date(profile.plan_expires_at) : null
           let activePlan = planExpiry && planExpiry < new Date() ? 'free' : (profile.plan || 'free')
 
-          // Launch Offer Note:
-          // We previously granted 'pro' forcibly to all within 30 days.
-          // This disconnected the admin panel from the UI state. We now rely strictly 
-          // on the database `profile.plan` so admins can correctly revoke or upgrade.
           set({
             user: {
               id        : authUser.id,
@@ -78,12 +80,13 @@ export const useAuthStore = create(
               name      : profile.name || authUser.email?.split('@')[0],
               avatar    : profile.avatar_url || null,
             },
+            accessToken   : session?.access_token || null,
             plan          : activePlan,
             planExpiry    : profile.plan_expires_at || null,
             subscriptionId: profile.subscription_id || null,
           })
-        } catch {
-          // Profile might not exist yet (race condition on first signup)
+        } catch (err) {
+          console.error('[AuthStore] Profile fetch failed:', err.message)
           set({
             user: {
               id    : authUser.id,
@@ -91,24 +94,11 @@ export const useAuthStore = create(
               name  : authUser.email?.split('@')[0],
               avatar: null,
             },
+            accessToken: session?.access_token || null,
             plan: 'free',
           })
-        }
-      },
-
-      // ── Sign Up ────────────────────────────────────────────
-      register: async (email, password, name) => {
-        set({ isLoading: true })
-        try {
-          await signUp(email, password, name)
-          // Supabase sends confirmation email by default.
-          // If email confirm is disabled, onAuthStateChange fires immediately.
-          toast.success('Account created! Check your email to confirm.')
-        } catch (err) {
-          toast.error(err.message || 'Sign up failed.')
-          throw err
         } finally {
-          set({ isLoading: false })
+          set({ _isHandlingSession: false, isAuthLoading: false })
         }
       },
 
@@ -118,9 +108,8 @@ export const useAuthStore = create(
         try {
           const data = await signIn(email, password)
           if (data?.user) {
-            await get()._handleSession(data.user)
+            await get()._handleSession(data.user, data.session)
           }
-          // onAuthStateChange will also fire and call _handleSession
         } catch (err) {
           const msg = err.message?.includes('Invalid login')
             ? 'Invalid email or password.'
@@ -148,8 +137,7 @@ export const useAuthStore = create(
             }
           })
           
-          // Hard reload the browser to purge all in-memory Zustand states
-          window.location.href = '/'
+          // Keep navigation in caller to avoid hard reload races in some browsers.
         }
       },
 

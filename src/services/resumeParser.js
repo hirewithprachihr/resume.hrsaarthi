@@ -12,6 +12,7 @@
  */
 
 import { supabase } from './supabase'
+import { useAuthStore } from '../store/authStore'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -33,11 +34,7 @@ export async function parseResumeWithAI(file) {
     )
   }
 
-  // Step 2: get current user session JWT
-  const { data: { session } } = await supabase.auth.getSession()
-  const jwt = session?.access_token
-
-  // Step 3: call edge function with hard 55s timeout
+  // Step 2: call edge function with hard 55s timeout
   // (Supabase Edge Functions have a 60s wall-time limit;
   //  we abort at 55s to ensure we can handle the abort gracefully)
   const controller = new AbortController()
@@ -47,14 +44,18 @@ export async function parseResumeWithAI(file) {
   console.time('[AI Parse] Network Request')
 
   try {
+    // Bypassing supabase.functions.invoke to avoid 'Lock not released' hangs
+    // Get session from store state (already synchronized and lock-free)
+    const jwt = useAuthStore.getState().accessToken || import.meta.env.VITE_SUPABASE_ANON_KEY
+
     const res = await fetch(`${SUPABASE_URL}/functions/v1/parse-resume`, {
-      method : 'POST',
+      method: 'POST',
       headers: {
-        'Content-Type' : 'application/json',
-        'Authorization': `Bearer ${jwt || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${jwt}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
       },
       signal: controller.signal,
-      // Aggressive truncation to 10kb to avoid OpenAI latency spikes (> 60s)
       body: JSON.stringify({
         text: text.length > 10000
           ? text.slice(0, 7000) + '\n...(continued)...\n' + text.slice(-3000)
@@ -63,31 +64,19 @@ export async function parseResumeWithAI(file) {
     })
 
     console.timeEnd('[AI Parse] Network Request')
-    console.log('[AI Parse] Status:', res.status)
 
-    clearTimeout(timeoutId)
-
-    // Handle non-ok HTTP responses BEFORE calling .json()
-    // (e.g., 504 Gateway Timeout returns HTML, not JSON)
     if (!res.ok) {
-      const json = await res.json().catch(() => null)
-      const errMsg = json?.error || `AI parsing failed (HTTP ${res.status}). Please try again.`
-      console.error('[AI Parse Error]:', { status: res.status, json })
-      throw new Error(errMsg)
+      const errorData = await res.json().catch(() => ({}))
+      throw new Error(errorData.error || `AI parsing failed (${res.status})`)
     }
 
-    const json = await res.json().catch(() => null)
-
-    if (!json?.ok) {
-      console.error('[AI Parse Error Debug]:', { 
-        status: res.status, 
-        ok: res.ok, 
-        json: json || 'invalid-json' 
-      })
-      throw new Error(json?.error || `AI parsing failed (${res.status}). Try a different file format.`)
+    const data = await res.json()
+    if (!data?.ok) {
+      console.error('[AI Parse Error Debug]:', data)
+      throw new Error(data?.error || 'AI parsing failed. Try a different file format.')
     }
 
-    return json.data
+    return data.data
   } catch (err) {
     console.timeEnd('[AI Parse] Network Request')
     if (err.name === 'AbortError') {

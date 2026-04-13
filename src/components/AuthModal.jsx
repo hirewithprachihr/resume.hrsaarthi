@@ -70,7 +70,7 @@ export default function AuthModal({ onClose, onSuccess, trigger = 'download' }) 
   const handlePostAuth = async () => {
     // Merge local resume to cloud
     try {
-      await loadCloudResumes()
+      await loadCloudResumes(true)
       if (resumeData?.personal?.fullName || resumeData?.experience?.length) {
         await saveResume(resumeData.personal.fullName || 'My Resume')
       }

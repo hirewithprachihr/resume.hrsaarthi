@@ -7,6 +7,9 @@ import {
 } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { clsx } from 'clsx'
+import { EVENT_NAMES, trackEvent } from '../services/analytics'
+import { useEntitlements } from '../utils/entitlements'
+import { isAdmin } from '../services/adminApi'
 
 const LAUNCH_DATE = new Date('2026-04-07')
 const SHOW_NEW = (new Date() - LAUNCH_DATE) < (30 * 24 * 60 * 60 * 1000)
@@ -32,9 +35,11 @@ export default function Navbar() {
   const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [adminAccess, setAdminAccess] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
   const { user, plan, logout, isAuthLoading } = useAuthStore()
+  const { isPro, launchOfferActive } = useEntitlements()
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 16)
@@ -46,6 +51,24 @@ export default function Navbar() {
     setMobileOpen(false)
     setUserMenuOpen(false)
   }, [location.pathname])
+
+  useEffect(() => {
+    let cancelled = false
+    async function checkAdmin() {
+      if (!user?.id) {
+        setAdminAccess(false)
+        return
+      }
+      try {
+        const ok = await isAdmin(user.id)
+        if (!cancelled) setAdminAccess(ok)
+      } catch {
+        if (!cancelled) setAdminAccess(false)
+      }
+    }
+    checkAdmin()
+    return () => { cancelled = true }
+  }, [user?.id])
 
   const isBuilder = location.pathname.startsWith('/builder')
   const isDark = scrolled || isBuilder
@@ -89,25 +112,29 @@ export default function Navbar() {
               <NavLink to="/templates"     icon={<LayoutTemplate size={13} />} dark={isDark}>Templates</NavLink>
               <NavLinkBadge to="/cover-letter"   icon={<FileText size={13}/>}    dark={isDark} badge="New" badgeColor="#0EC8A0">Cover Letter</NavLinkBadge>
               <NavLinkBadge to="/interview-prep" icon={<Brain size={13} />}      dark={isDark} badge="New" badgeColor="#8B5CF6">Interview</NavLinkBadge>
-              <NavLink to="/ats-score"     icon={<Zap size={13} />}            dark={isDark}>ATS Score</NavLink>
+              <NavLink to="/ats-score"     icon={<Zap size={13} />}            dark={isDark}>Readiness</NavLink>
               {user && <NavLink to="/dashboard" icon={<BarChart3 size={13} />} dark={isDark}>Dashboard</NavLink>}
             </nav>
 
             {/* ── Right Side ──────────────────────────── */}
             <div className="hidden md:flex items-center gap-3">
               {/* Plan badge */}
-              {plan === 'pro' ? (
+              {isPro ? (
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border"
                   style={{ background: 'linear-gradient(135deg, #D4A84320, #C9A84C15)', color: '#D4A843', borderColor: '#D4A84340' }}>
-                  <Star size={10} className="fill-current" /> Elite Pro
+                  <Star size={10} className="fill-current" /> {launchOfferActive && plan !== 'pro' ? 'Trial Pro' : 'Elite Pro'}
                 </div>
               ) : (
-                <Link to="/upgrade" className={clsx(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all',
-                  isDark
-                    ? 'bg-white/8 text-white/70 hover:bg-white/15 border border-white/10'
-                    : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'
-                )}>
+                <Link
+                  to="/upgrade"
+                  onClick={() => trackEvent(EVENT_NAMES.UPGRADE_CLICK, { source: 'navbar' })}
+                  className={clsx(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all',
+                    isDark
+                      ? 'bg-white/8 text-white/70 hover:bg-white/15 border border-white/10'
+                      : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'
+                  )}
+                >
                   <Star size={10} /> Upgrade
                 </Link>
               )}
@@ -151,13 +178,17 @@ export default function Navbar() {
                           <div className="p-1.5">
                             <DropItem to="/dashboard"   icon={<BarChart3 size={13} />} onClick={() => setUserMenuOpen(false)}>My Dashboard</DropItem>
                             <DropItem to="/upgrade"     icon={<Star size={13} />}      onClick={() => setUserMenuOpen(false)}>Upgrade to Pro</DropItem>
-                            {user.id === '7d7d97a2-ac96-4564-ba40-6668c74d46ad' && (
+                            {adminAccess && (
                               <DropItem to="/admin" icon={<Shield size={13} />} onClick={() => setUserMenuOpen(false)}>
                                 <span style={{ color: '#D4A843' }}>Admin Panel</span>
                               </DropItem>
                             )}
                             <div className="my-1" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }} />
-                            <button onClick={async () => { await logout(); setUserMenuOpen(false); navigate('/') }}
+                            <button onClick={async () => {
+                              setUserMenuOpen(false)
+                              await logout()
+                              navigate('/')
+                            }}
                               className="w-full flex items-center gap-3 px-3 py-2.5 text-xs font-bold rounded-xl text-red-400 hover:bg-red-500/10 transition-colors">
                               <LogOut size={13} /> Sign Out
                             </button>
@@ -210,9 +241,9 @@ export default function Navbar() {
                 <MobLink to="/templates">     <LayoutTemplate size={14} /> Templates</MobLink>
                 <MobLink to="/cover-letter">  <FileText size={14} />       Cover Letter</MobLink>
                 <MobLink to="/interview-prep"><Brain size={14} />           Interview Prep</MobLink>
-                <MobLink to="/ats-score">     <Zap size={14} />            ATS Score</MobLink>
+                <MobLink to="/ats-score">     <Zap size={14} />            Readiness</MobLink>
                 {user && <MobLink to="/dashboard"><BarChart3 size={14} /> Dashboard</MobLink>}
-                {plan !== 'pro' && <MobLink to="/upgrade"><Star size={14} /> Upgrade to Elite</MobLink>}
+                {!isPro && <MobLink to="/upgrade"><Star size={14} /> Upgrade to Elite</MobLink>}
                 <div className="pt-2 mt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
                   {user
                     ? <button onClick={async () => { await logout(); navigate('/') }}

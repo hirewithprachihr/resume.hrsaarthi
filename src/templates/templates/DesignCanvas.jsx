@@ -26,12 +26,12 @@ export default function DesignCanvas({ data = {}, settings = {} }) {
   const foundTools = DESIGN_TOOLS.filter(t => allSkillText.includes(t.toLowerCase()))
 
   return (
-    <div className="resume-a4" style={{ display: 'flex', fontFamily: bodyFont, background: lightBg, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', fontFamily: bodyFont, background: lightBg, overflow: 'visible', minHeight: '100%' }}>
 
       {/* ── LEFT COLOR BLOCK ──────────────────────────── */}
-      <div style={{
+      <div data-is-sidebar="true" style={{
         width: '35%', background: accent, color: '#fff',
-        padding: '44px 22px 36px', boxSizing: 'border-box',
+        padding: '40px 22px 36px', boxSizing: 'border-box',
         display: 'flex', flexDirection: 'column', position: 'relative',
         overflow: 'hidden',
       }}>

@@ -1,1 +1,0 @@
-import{u as s}from"./index-CPDYluLC.js";function o(t=s.getState()){const e=t.plan==="pro"||!!t.testMode,n=!t.user;return{isPro:e,isGuest:n,canUseAIFeatures:e,canUseJDMatching:e,canExportDocx:e,freeMaxSavedResumes:e?1/0:1}}function u(){const{plan:t,testMode:e,user:n}=s();return o({plan:t,testMode:e,user:n})}export{o as g,u};

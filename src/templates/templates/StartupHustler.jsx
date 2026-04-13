@@ -19,7 +19,7 @@ const StartupHustler = React.memo(function StartupHustler({ data, settings }) {
   return (
     <div style={{ fontFamily: TYPE.SANS, ...pt(TYPE.SIZE.BODY), minHeight: '100%', background: '#fff' }}>
       {/* Compact header bar */}
-      <div style={{ background: `linear-gradient(135deg, ${accent} 0%, #b91c1c 100%)`, padding: `28px ${TYPE.SPACE.PAGE_SIDES}px 22px`, color: '#fff' }}>
+      <div style={{ background: `linear-gradient(135deg, ${accent} 0%, #b91c1c 100%)`, padding: `40px ${TYPE.SPACE.PAGE_SIDES}px 22px`, color: '#fff' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px' }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: `${TYPE.SIZE.NAME * 1.3}px`, fontWeight: TYPE.weight.black, color: '#fff', letterSpacing: '-0.03em', lineHeight: 1.1, marginBottom: '4px', overflowWrap: 'break-word' }}>

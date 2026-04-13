@@ -5,7 +5,7 @@ import { saveResumeToDb, getResumes, deleteResumeFromDb, togglePublic as toggleP
 import { useAuthStore } from './authStore'
 
 // ─── Schema Version ─────────────────────────────────────────────
-const SCHEMA_VERSION = 3
+const SCHEMA_VERSION = 4
 
 // ─── Safe UUID ──────────────────────────────────────────────────
 /**
@@ -54,6 +54,14 @@ const DEFAULT_RESUME = {
     twitter : '',
     photo   : '',   // base64 data-URL, max ~150 KB after compression
     summary : '',
+    yearsExperience   : '',
+    openToRelocate    : false,
+    relocationCities  : '',
+    workAuthorization : '',
+    visaType          : '',
+    noticePeriodDays  : '',
+    expectedCompensation: { currency: 'INR', min: '', max: '', period: 'annual' },
+    preferredWorkMode : '',
   },
   experience    : [],
   education     : [],
@@ -132,6 +140,34 @@ function migrate(old) {
     }
   }
 
+  // v3 → v4: job-search preferences + employment type / team size
+  if (!old.version || old.version < 4) {
+    const rd = migrated.resumeData || {}
+    const ec = rd.personal?.expectedCompensation
+    migrated.resumeData = {
+      ...rd,
+      personal: {
+        ...DEFAULT_RESUME.personal,
+        ...rd.personal,
+        yearsExperience   : rd.personal?.yearsExperience ?? '',
+        openToRelocate    : rd.personal?.openToRelocate ?? false,
+        relocationCities  : rd.personal?.relocationCities ?? '',
+        workAuthorization : rd.personal?.workAuthorization ?? '',
+        visaType          : rd.personal?.visaType ?? '',
+        noticePeriodDays  : rd.personal?.noticePeriodDays ?? '',
+        expectedCompensation: ec && typeof ec === 'object'
+          ? { currency: ec.currency || 'INR', min: ec.min ?? '', max: ec.max ?? '', period: ec.period || 'annual' }
+          : { currency: 'INR', min: '', max: '', period: 'annual' },
+        preferredWorkMode : rd.personal?.preferredWorkMode ?? '',
+      },
+      experience: (rd.experience || []).map(e => ({
+        ...e,
+        employmentType: e.employmentType || 'full_time',
+        teamSize       : e.teamSize ?? '',
+      })),
+    }
+  }
+
   return migrated
 }
 
@@ -148,6 +184,11 @@ export const useResumeStore = create(
       activeResumeId: null,
       isDirty       : false,
       version       : SCHEMA_VERSION,
+      /** Set true after AI summary/bullet/tailor/upload-parse; cleared after export attestation. Not persisted. */
+      aiAssistPendingAttestation: false,
+
+      markAiAssistUsed: () => set({ aiAssistPendingAttestation: true }),
+      acknowledgeAiAssistAttestation: () => set({ aiAssistPendingAttestation: false }),
 
       // ── Import AI Parsed Data ──────────────────────────────────
       // NOTE: The canonical fillFromParsed is defined later in this store (with full field mapping).
@@ -167,6 +208,8 @@ export const useResumeStore = create(
             id: generateId(),
             title: '', company: '', location: '', startDate: '', endDate: '',
             current: false, bullets: [''],
+            employmentType: 'full_time',
+            teamSize: '',
           }],
         },
         isDirty: true,
@@ -350,6 +393,7 @@ export const useResumeStore = create(
       // ── ATS ────────────────────────────────────────────────────
       setATSScore       : (score) => set({ atsScore: score }),
       setJobDescription : (jd)    => set({ jobDescription: jd }),
+      clearJobDescription: ()     => set({ jobDescription: '' }),
 
       // ── Resume Management ──────────────────────────────────────
       saveResume: async (title = 'My Resume') => {
@@ -373,6 +417,7 @@ export const useResumeStore = create(
           settings : state.settings,
           updatedAt: new Date().toISOString(),
           atsScore : state.atsScore?.total || 0,
+          jobDescription: state.jobDescription || '',
         }
         set(s => ({
           savedResumes: s.savedResumes.some(r => r.id === id)
@@ -406,6 +451,7 @@ export const useResumeStore = create(
             activeResumeId: id,
             isDirty       : false,
             atsScore      : null,
+            jobDescription: resume.jobDescription ?? '',
           })
         }
       },
@@ -423,41 +469,50 @@ export const useResumeStore = create(
       },
 
       // Load resumes from Supabase cloud on login & merge with local
-      loadCloudResumes: async () => {
+      loadCloudResumes: async (force = false) => {
         const currentUser = useAuthStore.getState().user
         if (!currentUser?.id) return
 
-        // ── 5-minute TTL cache ──────────────────────────────────────
-        // Prevent hammering the DB on every dashboard mount.
-        // Skip if we fetched < 5 minutes ago AND already have data.
-        const state = get()
-        const FIVE_MIN = 5 * 60 * 1000
-        const lastFetch = state._lastCloudFetch || 0
-        const hasFreshData = Date.now() - lastFetch < FIVE_MIN && state.savedResumes.length > 0
-        if (hasFreshData) return
-        // ─────────────────────────────────────────────────────────────
+        // Prevent concurrent syncs
+        if (get()._isSyncing) return
+        set({ _isSyncing: true })
 
         try {
-          const cloudResumes = await getResumes(currentUser.id)
-          if (!cloudResumes || cloudResumes.length === 0) {
-            set(s => ({ savedResumes: [], _lastCloudFetch: Date.now() }))
+          // ── 5-minute TTL cache ──────────────────────────────────────
+          const state = get()
+          const FIVE_MIN = 5 * 60 * 1000
+          const lastFetch = state._lastCloudFetch || 0
+          const sameUser = state._lastCloudFetchUserId === currentUser.id
+          const hasFreshData = Date.now() - lastFetch < FIVE_MIN && state.savedResumes.length > 0 && sameUser
+          
+          if (!force && hasFreshData) {
+            set({ _isSyncing: false })
             return
           }
-          // Normalize cloud resumes: getResumes returns { data } but local store uses { resumeData }
+
+          const cloudResumes = await getResumes(currentUser.id)
+          if (!cloudResumes || cloudResumes.length === 0) {
+            set(s => ({ savedResumes: [], _lastCloudFetch: Date.now(), _lastCloudFetchUserId: currentUser.id, _isSyncing: false }))
+            return
+          }
+          // Normalize cloud resumes
           const normalized = cloudResumes.map(r => ({
             ...r,
             resumeData: r.resumeData || r.data,
             data      : undefined,
+            jobDescription: r.jobDescription ?? '',
+            isPublic: r.isPublic ?? r.is_public ?? false,
           }))
           set(s => {
             const merged = [
               ...normalized,
               ...s.savedResumes.filter(r => !normalized.some(c => c.id === r.id)),
             ].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
-            return { savedResumes: merged, _lastCloudFetch: Date.now() }
+            return { savedResumes: merged, _lastCloudFetch: Date.now(), _lastCloudFetchUserId: currentUser.id, _isSyncing: false }
           })
         } catch (err) {
           console.warn('[ResumeStore] Could not load cloud resumes:', err.message)
+          set({ _isSyncing: false })
         }
       },
 
@@ -468,6 +523,7 @@ export const useResumeStore = create(
         isDirty       : false,
         atsScore      : null,
         jobDescription: '',
+        aiAssistPendingAttestation: false,
       }),
 
       clearStore: () => set({
@@ -478,8 +534,36 @@ export const useResumeStore = create(
         isDirty       : false,
         atsScore      : null,
         jobDescription: '',
+        aiAssistPendingAttestation: false,
         _lastCloudFetch: 0,
+        _lastCloudFetchUserId: null,
       }),
+
+      // Clone current in-editor resume to a new saved slot with a custom label
+      cloneResume: async (title = 'Clone') => {
+        const state = get()
+        const newId = generateId()
+        const clone = {
+          id         : newId,
+          title,
+          resumeData : state.resumeData,
+          settings   : state.settings,
+          updatedAt  : new Date().toISOString(),
+          atsScore   : state.atsScore?.total || 0,
+          jobDescription: state.jobDescription || '',
+        }
+        set(s => ({ savedResumes: [...s.savedResumes, clone] }))
+        // Cloud sync
+        const user = useAuthStore.getState().user
+        if (user?.id) {
+          try { await saveResumeToDb(user.id, { ...clone, data: clone.resumeData }) }
+          catch { /* local save succeeded */ }
+        }
+        return newId
+      },
+
+      // Expose as `currentResumeId` alias for version panel
+      get currentResumeId() { return get().activeResumeId },
 
       duplicateResume: (id) => {
         const state = get()
@@ -493,6 +577,7 @@ export const useResumeStore = create(
             updatedAt : new Date().toISOString(),
             resumeData: resume.resumeData || resume.data,  // normalize
             data      : undefined,
+            jobDescription: resume.jobDescription || '',
           }
           set(s => ({ savedResumes: [...s.savedResumes, copy] }))
         }
@@ -522,6 +607,7 @@ export const useResumeStore = create(
       fillFromParsed: (parsed) => set(s => ({
         resumeData: {
           personal: {
+            ...DEFAULT_RESUME.personal,
             fullName: parsed.name      || '',
             jobTitle: parsed.jobTitle  || '',
             email   : parsed.email     || '',
@@ -540,6 +626,8 @@ export const useResumeStore = create(
             endDate       : e.endDate   || '',
             current       : e.current   || false,
             bullets       : e.bullets   || [''],
+            employmentType: e.employmentType || 'full_time',
+            teamSize      : e.teamSize ?? '',
             forcePageBreak: false,
             nudge         : 0,
           })),
@@ -583,6 +671,7 @@ export const useResumeStore = create(
         settings      : state.settings,
         savedResumes  : state.savedResumes,
         activeResumeId: state.activeResumeId,
+        jobDescription: state.jobDescription,
         version       : state.version,
       }),
       onRehydrateStorage: () => (state) => {

@@ -11,7 +11,7 @@ import { clsx } from 'clsx'
 import BulletQualityBadge from '../BulletQualityBadge'
 
 export default function ExperienceForm() {
-  const { resumeData, addExperience, updateExperience, removeExperience } = useResumeStore()
+  const { resumeData, addExperience, updateExperience, removeExperience, markAiAssistUsed } = useResumeStore()
   const { isPro } = useEntitlements()
   const [expanded, setExpanded] = useState({})
   const [enhancing, setEnhancing] = useState(null) // { expId, bulletIdx }
@@ -48,6 +48,7 @@ export default function ExperienceForm() {
 
   const applyVariation = (expId, bulletIdx, val) => {
     updateBullet(expId, bulletIdx, val)
+    markAiAssistUsed()
     setEnhancing(null)
     setVariations(null)
     toast.success('Achievement upgraded!')
@@ -136,6 +137,34 @@ export default function ExperienceForm() {
                   />
                   <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">I currently work here</span>
                 </label>
+
+                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-100">
+                  <div>
+                    <label htmlFor={`exp-emp-type-${exp.id}`} className="label">Employment type</label>
+                    <select
+                      id={`exp-emp-type-${exp.id}`}
+                      className="input-field"
+                      value={exp.employmentType || 'full_time'}
+                      onChange={e => updateExperience(exp.id, { employmentType: e.target.value })}
+                    >
+                      <option value="full_time">Full-time</option>
+                      <option value="contract">Contract</option>
+                      <option value="intern">Internship</option>
+                      <option value="consulting">Consulting</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor={`exp-team-${exp.id}`} className="label">Team size (optional)</label>
+                    <input
+                      id={`exp-team-${exp.id}`}
+                      className="input-field"
+                      placeholder="e.g. 12"
+                      inputMode="numeric"
+                      value={exp.teamSize ?? ''}
+                      onChange={e => updateExperience(exp.id, { teamSize: e.target.value })}
+                    />
+                  </div>
+                </div>
 
                 {/* Bullets */}
                 <div className="pt-2 border-t border-gray-100">

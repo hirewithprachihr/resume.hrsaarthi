@@ -121,3 +121,18 @@ export async function deleteUser(userId) {
     .eq('id', userId)
   if (error) throw error
 }
+
+/** Event counts since ISO timestamp (admin RLS). Aggregated client-side. */
+export async function fetchEventCounts(sinceIso) {
+  const { data, error } = await supabase
+    .from('events')
+    .select('event_name')
+    .gte('created_at', sinceIso)
+  if (error) throw error
+  const counts = {}
+  for (const row of data || []) {
+    const n = row.event_name
+    counts[n] = (counts[n] || 0) + 1
+  }
+  return counts
+}

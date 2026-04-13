@@ -33,18 +33,17 @@ const A4_H_MM = 297
 const SCALE = 3
 
 /**
- * White breathing room added at the top of page 2+ slices.
- * 72px in 1× space gives a generous editorial gap before continuation content
- * and enough room for the name/page-number runner we draw in canvas.
+ * Editorial top-margin added to page 2+ slices (aligns with builder page-break guide).
  */
-const PAGE2_TOP_MARGIN = 72
+const PAGE2_TOP_MARGIN = 56
 
 /**
- * Bottom safety buffer removed from page 1's available height.
- * Ensures content never runs flush to the very bottom of page 1.
- * 56px = roughly 2 lines of text — comfortable breathing room.
+ * Bottom safety buffer for page 1.
  */
 const PAGE1_BOTTOM_MARGIN = 56
+
+/** Uniform margin (mm) inset for PDF pages — keeps content off the physical edge. */
+const PDF_MARGIN_MM = 8
 
 /**
  * Blank guard margin above a hard-cut fallback page.
@@ -111,6 +110,7 @@ function addWatermark(pdf, pageCount) {
  */
 export async function exportToPDF(resumeData, settings, templateComponent, filename = 'resume', isPro = false) {
   const container = document.createElement('div')
+  container.className = 'resume-export-root'
   container.style.cssText = [
     'position:fixed',
     'left:-9999px',
@@ -119,6 +119,7 @@ export async function exportToPDF(resumeData, settings, templateComponent, filen
     'background:white',
     'z-index:-9999',
     'visibility:hidden',
+    'overflow:visible',
     '-webkit-print-color-adjust:exact',
     'print-color-adjust:exact',
   ].join(';')
@@ -133,7 +134,16 @@ export async function exportToPDF(resumeData, settings, templateComponent, filen
     root = createRoot(container)
 
     await new Promise(resolve => {
-      root.render(createElement(templateComponent, { data: resumeData, settings }))
+      root.render(
+        createElement(
+          'div',
+          {
+            className: 'resume-a4 bg-white',
+            style: { boxSizing: 'border-box', overflow: 'visible', width: `${A4_W_PX}px` },
+          },
+          createElement(templateComponent, { data: resumeData, settings }),
+        ),
+      )
       requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve)))
     })
 
@@ -173,8 +183,12 @@ export async function exportToPDF(resumeData, settings, templateComponent, filen
       imageTimeout    : 25000,
       removeContainer : false,
       onclone: (doc) => {
-        const el = doc.body.querySelector('div')
-        if (el) { el.style.visibility = 'visible'; el.style.overflowX = 'hidden' }
+        const el = doc.body.querySelector('.resume-export-root') || doc.body.querySelector('div')
+        if (el) {
+          el.style.visibility = 'visible'
+          el.style.overflow = 'visible'
+          el.style.overflowX = 'visible'
+        }
       },
     })
 
@@ -188,12 +202,20 @@ export async function exportToPDF(resumeData, settings, templateComponent, filen
       compress    : true,
     })
 
+    // ── Pre-detect Sidebar Color & Width ──
+    const sidebarEl = container.querySelector('[data-is-sidebar="true"]')
+    let sidebarWidthPx = 0
+    let sidebarColor   = '#ffffff'
+    if (sidebarEl) {
+      const rect = sidebarEl.getBoundingClientRect()
+      sidebarWidthPx = rect.width
+      sidebarColor   = window.getComputedStyle(sidebarEl).backgroundColor
+    }
+
     for (let p = 0; p < totalPages; p++) {
       const sliceTopPx    = breakPoints[p]
       const sliceBottomPx = breakPoints[p + 1] !== undefined ? breakPoints[p + 1] : totalHeight
 
-      // Page 2+ gets a generous top breathing-room margin
-      // Page 1 gets a bottom safety margin so content never clips at the edge
       const topMargin      = p > 0 ? PAGE2_TOP_MARGIN : 0
       const bottomReserve  = p === 0 ? PAGE1_BOTTOM_MARGIN : 0
       const sliceHeightPx  = Math.min(
@@ -206,9 +228,17 @@ export async function exportToPDF(resumeData, settings, templateComponent, filen
       pageCanvas.height = A4_H_PX * SCALE
 
       const pageCtx = pageCanvas.getContext('2d')
+      
+      // 1. Fill base page (White for main, Sidebar color for side)
       pageCtx.fillStyle = '#ffffff'
       pageCtx.fillRect(0, 0, pageCanvas.width, pageCanvas.height)
+      
+      if (sidebarWidthPx > 0) {
+        pageCtx.fillStyle = sidebarColor
+        pageCtx.fillRect(0, 0, sidebarWidthPx * SCALE, pageCanvas.height)
+      }
 
+      // 2. Draw the content slice
       pageCtx.drawImage(
         fullCanvas,
         0,
@@ -216,14 +246,22 @@ export async function exportToPDF(resumeData, settings, templateComponent, filen
         A4_W_PX * SCALE,
         sliceHeightPx * SCALE,
         0,
+        topMargin * SCALE,
         A4_W_PX * SCALE,
         sliceHeightPx * SCALE,
       )
 
       // ── Page 2+ Premium Header (Runner) ──
       if (p > 0) {
-        pageCtx.fillStyle = '#94a3b8' // Slate-400
-        pageCtx.font = `bold ${8 * SCALE}px "Inter", sans-serif`
+        // Runner background extension (optional, ensures no weird edges)
+        pageCtx.fillStyle = sidebarColor
+        pageCtx.fillRect(0, 0, sidebarWidthPx * SCALE, topMargin * SCALE)
+
+        const isDarkSidebar = isColorDark(sidebarColor)
+
+        pageCtx.fillStyle = isDarkSidebar ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.4)'
+        pageCtx.font = `${8 * SCALE}px "Inter", sans-serif`
+        
         pageCtx.textAlign = 'left'
         const nameLabel = (resumeData.personal.fullName || 'RESUME').toUpperCase()
         pageCtx.fillText(nameLabel, 48 * SCALE, 28 * SCALE)
@@ -232,7 +270,7 @@ export async function exportToPDF(resumeData, settings, templateComponent, filen
         pageCtx.fillText(`PAGE ${p + 1} OF ${totalPages}`, (A4_W_PX - 48) * SCALE, 28 * SCALE)
         
         // Faint separator line
-        pageCtx.strokeStyle = '#e2e8f0'
+        pageCtx.strokeStyle = isDarkSidebar ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'
         pageCtx.lineWidth = 0.5 * SCALE
         pageCtx.beginPath()
         pageCtx.moveTo(48 * SCALE, 34 * SCALE)
@@ -242,19 +280,16 @@ export async function exportToPDF(resumeData, settings, templateComponent, filen
 
       if (p > 0) pdf.addPage()
 
-      const imgData     = pageCanvas.toDataURL('image/png')
-      const imgHeightMM = (sliceHeightPx / A4_W_PX) * A4_W_MM
+      const imgData = pageCanvas.toDataURL('image/png')
+      const innerW = A4_W_MM - 2 * PDF_MARGIN_MM
+      const innerH = A4_H_MM - 2 * PDF_MARGIN_MM
+      const scaleFit = Math.min(innerW / A4_W_MM, innerH / A4_H_MM)
+      const drawW = A4_W_MM * scaleFit
+      const drawH = A4_H_MM * scaleFit
+      const x = PDF_MARGIN_MM + (innerW - drawW) / 2
+      const y = PDF_MARGIN_MM + (innerH - drawH) / 2
 
-      pdf.addImage(
-        imgData,
-        'PNG',
-        0,
-        0,
-        A4_W_MM,
-        Math.min(imgHeightMM, A4_H_MM),
-        undefined,
-        'FAST',
-      )
+      pdf.addImage(imgData, 'PNG', x, y, drawW, drawH, undefined, 'FAST')
     }
 
     // Watermark for free-tier users
@@ -403,6 +438,86 @@ function collectLineCandidates(container) {
 }
 
 
+// ─── Browser print — fresh A4 mount (works when live preview is not in DOM) ─
+
+/**
+ * Open a print dialog with the resume rendered inside a `.resume-a4` frame,
+ * matching PDF export and on-screen typography.
+ */
+export async function printResumeWithComponent(templateComponent, resumeData, settings) {
+  const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+    .map(n => n.outerHTML).join('\n')
+
+  const printWindow = window.open('', '_blank')
+  if (!printWindow) {
+    throw new Error('Pop-up blocked — allow pop-ups to print.')
+  }
+
+  printWindow.document.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Resume</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  ${styles}
+  <style>
+    @page { size: A4 portrait; margin: 0; }
+    html, body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    * { box-sizing: border-box; }
+    .resume-page-break-visual, .no-print { display: none !important; }
+    .resume-a4 {
+      width: 794px;
+      min-height: 1123px;
+      margin: 0 auto;
+      background: #fff;
+    }
+    @media print {
+      .resume-a4 {
+        width: 210mm !important;
+        min-height: 297mm !important;
+        margin: 0 !important;
+        padding: 18mm 15mm !important;
+        box-shadow: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="print-resume-root"></div>
+</body>
+</html>`)
+  printWindow.document.close()
+
+  const { createRoot } = await import('react-dom/client')
+  const { createElement } = await import('react')
+  const mount = printWindow.document.getElementById('print-resume-root')
+  const root = createRoot(mount)
+
+  root.render(
+    createElement(
+      'div',
+      { className: 'resume-a4 bg-white' },
+      createElement(templateComponent, { data: resumeData, settings }),
+    ),
+  )
+
+  await printWindow.document.fonts.ready
+  await document.fonts.ready
+  await warmFonts()
+  await delay(400)
+  forceFontRender(mount)
+  await delay(150)
+
+  printWindow.focus()
+  printWindow.print()
+  setTimeout(() => {
+    try { root.unmount() } catch (_) {}
+    try { printWindow.close() } catch (_) {}
+  }, 500)
+}
+
 // ─── Browser Print Fallback ──────────────────────────────────────
 
 export function printResume(elementId) {
@@ -428,7 +543,20 @@ export function printResume(elementId) {
     @page { size: A4 portrait; margin: 0; }
     body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     * { box-sizing: border-box; }
-    .resume-a4 { width: 210mm; }
+    .resume-a4 {
+      width: 794px;
+      min-height: 1123px;
+      margin: 0 auto;
+      background: #fff;
+    }
+    @media print {
+      .resume-a4 {
+        width: 210mm !important;
+        min-height: 297mm !important;
+        margin: 0 !important;
+        padding: 18mm 15mm !important;
+      }
+    }
     .resume-page-break-visual, .no-print { display: none !important; }
   </style>
 </head>
@@ -479,4 +607,14 @@ async function warmFonts() {
     }
   }
   await Promise.allSettled(loads)
+}
+
+/** Helper to determine if a color is dark enough to need light text */
+function isColorDark(color) {
+  if (!color || color === 'transparent') return false
+  const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
+  if (!match) return false
+  const [_, r, g, b] = match
+  const brightness = (parseInt(r) * 299 + parseInt(g) * 587 + parseInt(b) * 114) / 1000
+  return brightness < 155
 }

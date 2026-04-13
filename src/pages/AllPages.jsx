@@ -32,7 +32,7 @@ export function LoginPage() {
         setMode('login')
       } else {
         await login(email, password)
-        await loadCloudResumes()
+        await loadCloudResumes(true)
         toast.success('Welcome back!')
         navigate(returnTo, { replace: true })
       }
@@ -106,23 +106,41 @@ export function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === 'signup' && (
               <div>
-                <label className="label">Full Name</label>
+                <label htmlFor="auth-name" className="label">Full Name</label>
                 <div className="relative">
                   <User size={15} className="absolute left-3.5 top-3 text-gray-400" />
-                  <input className="input-field pl-9" type="text" placeholder="Rahul Sharma" value={name} onChange={e => setName(e.target.value)} required />
+                  <input
+                    id="auth-name"
+                    name="name"
+                    className="input-field pl-9"
+                    type="text"
+                    placeholder="Rahul Sharma"
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    required
+                  />
                 </div>
               </div>
             )}
             <div>
-              <label className="label">Email Address</label>
+              <label htmlFor="auth-email" className="label">Email Address</label>
               <div className="relative">
                 <Mail size={15} className="absolute left-3.5 top-3 text-gray-400" />
-                <input className="input-field pl-9" type="email" placeholder="rahul@email.com" value={email} onChange={e => setEmail(e.target.value)} required />
+                <input
+                  id="auth-email"
+                  name="email"
+                  className="input-field pl-9"
+                  type="email"
+                  placeholder="rahul@email.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                />
               </div>
             </div>
             <div>
               <div className="flex justify-between items-center mb-1.5">
-                <label className="label mb-0">Password</label>
+                <label htmlFor="auth-password" className="label mb-0">Password</label>
                 {mode === 'login' && (
                   <button
                     type="button"
@@ -142,6 +160,8 @@ export function LoginPage() {
               <div className="relative">
                 <Lock size={15} className="absolute left-3.5 top-3 text-gray-400" />
                 <input
+                  id="auth-password"
+                  name="password"
                   className="input-field pl-9 pr-10"
                   type={showPass ? 'text' : 'password'}
                   placeholder="Min 8 characters"
@@ -192,7 +212,7 @@ export function DashboardPage() {
     // Sync cloud resumes when dashboard mounts and user is logged in
     if (user?.id) {
       setSyncing(true)
-      loadCloudResumes().finally(() => setSyncing(false))
+      loadCloudResumes(true).finally(() => setSyncing(false))
     }
   }, [user?.id])
 
@@ -572,7 +592,7 @@ export function ATSScorePage() {
     setJobDescription(jd)
     const score = scoreResume(resumeData, jd)
     setATSScore(score)
-    toast.success('ATS analysis updated!')
+    toast.success('Readiness analysis updated!')
   }
 
   const score = atsScore || scoreResume(resumeData, jobDescription)
@@ -589,8 +609,8 @@ export function ATSScorePage() {
     <div className="min-h-screen bg-gray-50 py-10">
       <div className="max-w-4xl mx-auto px-4 sm:px-6">
         <div className="text-center mb-10">
-          <h1 className="font-display text-4xl text-gray-900 mb-3">ATS Score Report</h1>
-          <p className="text-gray-500">See how your resume performs against ATS systems used by Naukri, LinkedIn, and top Indian companies</p>
+          <h1 className="font-display text-4xl text-gray-900 mb-3">Resume readiness report</h1>
+          <p className="text-gray-500">A heuristic check for structure, keywords, and clarity — not a guarantee for any specific employer ATS.</p>
         </div>
 
         {/* Main score */}
@@ -605,7 +625,7 @@ export function ATSScorePage() {
             </div>
             <div className="font-display text-2xl text-gray-900 mb-1">{score.grade.label}</div>
             <div className="text-gray-500 text-sm mb-6">
-              {score.total >= 85 ? 'Excellent! Your resume is ATS-optimised and ready to apply.' :
+              {score.total >= 85 ? 'Excellent! Your resume looks strong on structure and keywords.' :
                score.total >= 70 ? 'Good resume! A few improvements will make it interview-ready.' :
                score.total >= 50 ? 'Average score. Follow the tips below to improve significantly.' :
                'Your resume needs work. Follow the fix list below carefully.'}
@@ -651,6 +671,8 @@ export function ATSScorePage() {
           </div>
           <p className="text-sm text-gray-500 mb-4">Paste the job description below to see which keywords you're missing and what to add.</p>
           <textarea
+            id="ats-jd-input"
+            name="jobDescription"
             className="input-field resize-none mb-3"
             rows={5}
             placeholder="Paste the job description here...&#10;&#10;Example: We are looking for a Senior React Developer with 4+ years of experience in React, TypeScript, Node.js, AWS..."

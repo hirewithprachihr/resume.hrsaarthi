@@ -1,468 +1,703 @@
 /**
- * CoverLetterPage — AI Cover Letter Generator
+ * CoverLetterPage — Premium AI Cover Letter Generator
  * ─────────────────────────────────────────────────────────────────
- * Route: /cover-letter
- * 
- * Left panel: Form (Job Title, Company, JD paste, Tone selector)
- * Right panel: Live preview of cover letter
- * Bottom bar: Generate AI, Word count, Copy, Download PDF (Pro gate)
- * 
- * Auto-populates from current resume data in Zustand store.
+ * Implements a split-pane, real-time interactive editor.
+ * Features: Inline editing, AI Refinement suite, Glassmorphic UI.
  */
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Sparkles, Copy, Check, Download, FileText, Zap, Loader,
   RefreshCw, Star, Lock, ChevronDown, Target, User, Briefcase,
-  AlignLeft, Crown,
+  AlignLeft, Crown, Wand2, Type, ArrowLeft, Layout, Send,
+  Maximize2, Eye, Edit3, Settings, ShieldCheck, Trash2
 } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useResumeStore } from '../store/resumeStore'
 import { useAuthStore } from '../store/authStore'
 import { getEntitlements } from '../utils/entitlements'
-import { supabase } from '../services/supabase'
+import { supabase, fetchCoverLetters, saveCoverLetter, deleteCoverLetter } from '../services/supabase'
+import { EVENT_NAMES, trackEvent } from '../services/analytics'
 import { exportToPDF } from '../utils/pdfExporter'
 import CLClassic from '../templates/cover-letter/CLClassic'
 import CLModern from '../templates/cover-letter/CLModern'
+import ConfirmModal from '../components/ConfirmModal'
 import toast from 'react-hot-toast'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
 const TONE_OPTIONS = [
-  { value: 'formal',    label: 'Formal',    description: 'Professional & traditional', icon: '🎩', color: '#6366F1' },
-  { value: 'warm',      label: 'Warm',      description: 'Friendly & approachable',    icon: '🤝', color: '#10B981' },
-  { value: 'assertive', label: 'Assertive', description: 'Confident & direct',         icon: '⚡', color: '#F59E0B' },
+  { value: 'formal',    label: 'Formal',    description: 'CEO-ready focus', icon: '👔', color: '#6366F1' },
+  { value: 'warm',      label: 'Warm',      description: 'Human-centric',    icon: '✨', color: '#10B981' },
+  { value: 'assertive', label: 'Bold',      description: 'Impact-driven',    icon: '⚡', color: '#F59E0B' },
 ]
 
 const TEMPLATE_OPTIONS = [
-  { id: 'classic', label: 'Classic', Component: CLClassic },
-  { id: 'modern',  label: 'Modern',  Component: CLModern },
+  { id: 'modern',  label: 'Modern', icon: <Layout size={14}/>, Component: CLModern },
+  { id: 'classic', label: 'Classic', icon: <Type size={14}/>, Component: CLClassic },
 ]
 
 export default function CoverLetterPage() {
-  const { resumeData, settings } = useResumeStore()
+  const navigate = useNavigate()
+  const { resumeData, settings, activeResumeId } = useResumeStore()
   const { user, plan, testMode } = useAuthStore()
   const { isPro } = getEntitlements({ user, plan, testMode })
 
-  // ── Form state ─────────────────────────────────────────────────
+  // ── State ──────────────────────────────────────────────────────
   const [jobTitle, setJobTitle]               = useState('')
   const [company, setCompany]                 = useState('')
   const [jobDescription, setJobDescription]   = useState('')
   const [tone, setTone]                       = useState('formal')
-  const [selectedTemplate, setSelectedTemplate] = useState('classic')
+  const [selectedTemplate, setSelectedTemplate] = useState('modern')
   const [recipientName, setRecipientName]     = useState('Hiring Manager')
+  const [letter, setLetter]                   = useState('')
+  const [isGenerating, setIsGenerating]       = useState(false)
+  const [isScanning, setIsScanning]           = useState(false)
+  const [copied, setCopied]                   = useState(false)
+  const [isExporting, setIsExporting]         = useState(false)
+  const [activeTab, setActiveTab]             = useState('details') // 'details' | 'customize'
+  const [savedLetters, setSavedLetters]       = useState([])
+  const [selectedLetterId, setSelectedLetterId] = useState('')
+  const [savingLetter, setSavingLetter]       = useState(false)
+  const [showSavedIndicator, setShowSavedIndicator] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [letterToDelete, setLetterToDelete]   = useState(null)
 
-  // ── Letter state ───────────────────────────────────────────────
-  const [letter, setLetter]       = useState('')
-  const [wordCount, setWordCount] = useState(0)
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [copied, setCopied]             = useState(false)
-  const [isExporting, setIsExporting]   = useState(false)
+  useEffect(() => {
+    if (!user?.id) return
+    fetchCoverLetters(user.id).then(setSavedLetters).catch(() => {})
+  }, [user?.id])
 
-  // ── Build candidate data from resume store ─────────────────────
-  const p = resumeData?.personal || {}
-  const experience = resumeData?.experience || []
-  const education  = resumeData?.education  || []
-  const skills     = resumeData?.skills     || []
+  const handleSaveVersion = async () => {
+    if (!user?.id) {
+      toast.error('Sign in to save cover letters to the cloud')
+      return
+    }
+    if (!letter.trim()) {
+      toast.error('Generate or write a letter before saving')
+      return
+    }
+    setSavingLetter(true)
+    try {
+      const row = {
+        ...(selectedLetterId ? { id: selectedLetterId } : {}),
+        user_id: user.id,
+        resume_id: activeResumeId || null,
+        title: `${(company || 'Role').slice(0, 60)} · ${(jobTitle || 'Letter').slice(0, 50)}`.slice(0, 120),
+        content: letter,
+        tone,
+        template_id: selectedTemplate,
+        company: company || null,
+        job_title: jobTitle || null,
+      }
+      const saved = await saveCoverLetter(row)
+      setSelectedLetterId(saved.id)
+      const list = await fetchCoverLetters(user.id)
+      setSavedLetters(list)
+      trackEvent(EVENT_NAMES.COVER_LETTER_SAVED, { id: saved.id })
+      
+      // Show "Saved ✓" indicator
+      setShowSavedIndicator(true)
+      setTimeout(() => setShowSavedIndicator(false), 2000)
+      
+      toast.success('Cover letter saved')
+    } catch (e) {
+      toast.error(e.message || 'Save failed')
+    } finally {
+      setSavingLetter(false)
+    }
+  }
 
-  const candidateName = p.fullName   || ''
-  const currentRole   = experience[0]?.title || p.jobTitle || ''
-  const yearsExp      = experience.length > 0
-    ? `${experience.length * 1.5 | 0}+`
-    : '2+'
-  const topSkills     = skills.slice(0, 2).map(s => s.items).join(', ') || ''
-  const achievement1  = experience[0]?.bullets?.[0] || ''
-  const achievement2  = experience[0]?.bullets?.[1] || experience[1]?.bullets?.[0] || ''
-  const edu           = education[0] ? `${education[0].degree} from ${education[0].school}` : ''
+  const loadVersion = (id) => {
+    if (!id) {
+      setSelectedLetterId('')
+      return
+    }
+    const v = savedLetters.find(x => x.id === id)
+    if (!v) return
+    setSelectedLetterId(v.id)
+    setLetter(v.content || '')
+    setTone(v.tone || 'formal')
+    setSelectedTemplate(v.template_id || 'modern')
+    if (v.company) setCompany(v.company)
+    if (v.job_title) setJobTitle(v.job_title)
+  }
 
-  // ── Template component lookup ──────────────────────────────────
-  const TemplateComponent = TEMPLATE_OPTIONS.find(t => t.id === selectedTemplate)?.Component || CLClassic
+  const handleDeleteClick = (letterId, e) => {
+    e.stopPropagation() // Prevent dropdown from changing selection
+    const letter = savedLetters.find(l => l.id === letterId)
+    setLetterToDelete(letter)
+    setShowDeleteConfirm(true)
+  }
 
-  // ── Template data object ───────────────────────────────────────
+  const handleDeleteConfirm = async () => {
+    if (!letterToDelete) return
+    
+    try {
+      await deleteCoverLetter(letterToDelete.id)
+      
+      // Remove from state
+      setSavedLetters(prev => prev.filter(l => l.id !== letterToDelete.id))
+      
+      // If deleted letter was selected, clear selection
+      if (selectedLetterId === letterToDelete.id) {
+        setSelectedLetterId('')
+      }
+      
+      toast.success('Cover letter deleted')
+      trackEvent(EVENT_NAMES.COVER_LETTER_DELETED, { id: letterToDelete.id })
+    } catch (e) {
+      toast.error(e.message || 'Delete failed')
+    } finally {
+      setShowDeleteConfirm(false)
+      setLetterToDelete(null)
+    }
+  }
+
+  // ── Derived Data ───────────────────────────────────────────────
+  const wordCount = letter.trim() ? letter.trim().split(/\s+/).length : 0
   const templateData = {
-    candidateName,
-    candidateEmail   : p.email    || '',
-    candidatePhone   : p.phone    || '',
-    candidateLocation: p.location || '',
+    candidateName: resumeData?.personal?.fullName || '',
+    candidateEmail: resumeData?.personal?.email || '',
+    candidatePhone: resumeData?.personal?.phone || '',
+    candidateLocation: resumeData?.personal?.location || '',
     recipientName,
     company,
     jobTitle,
     letter,
-    accentColor      : settings?.accentColor || '#1A56DB',
+    accentColor: settings?.accentColor || '#1A56DB',
+    isEditing: true,
+    onLetterChange: (val) => setLetter(val)
   }
 
-  // ── Generate cover letter ──────────────────────────────────────
-  const handleGenerate = useCallback(async () => {
+  const TemplateComponent = TEMPLATE_OPTIONS.find(t => t.id === selectedTemplate)?.Component || CLModern
+
+  // ── Handlers ───────────────────────────────────────────────────
+  const handleGenerate = useCallback(async (refineInstruction = '') => {
     if (!jobTitle.trim() || !company.trim()) {
-      toast.error('Please fill in Job Title and Company Name first.')
+      toast.error('Job Title and Company are required')
       return
     }
 
-    setIsGenerating(true)
+    if (refineInstruction) {
+      setIsGenerating(true)
+    } else {
+      setIsScanning(true)
+      // Artificial "Deep Scanning" delay for premium feel
+      await new Promise(r => setTimeout(r, 1500))
+      setIsScanning(false)
+      setIsGenerating(true)
+    }
+
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 60000) // 60s timeout
 
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const jwt = session?.access_token
-
-      const controller = new AbortController()
-      const timeoutId  = setTimeout(() => controller.abort(), 60000)
+      // Bypassing supabase.functions.invoke to avoid 'Lock not released' hangs
+      // Get session from store state (already synchronized and lock-free)
+      const jwt = useAuthStore.getState().accessToken || import.meta.env.VITE_SUPABASE_ANON_KEY
 
       const res = await fetch(`${SUPABASE_URL}/functions/v1/generate-cover-letter`, {
-        method : 'POST',
+        method: 'POST',
         headers: {
-          'Content-Type' : 'application/json',
-          'Authorization': `Bearer ${jwt || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${jwt}`,
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
         },
         signal: controller.signal,
-        body  : JSON.stringify({
+        body: JSON.stringify({
           jobTitle,
           company,
-          jobDescription : jobDescription.slice(0, 1500),
+          jobDescription: jobDescription.slice(0, 2000),
           tone,
-          resumeData     : {
-            name        : candidateName,
-            currentRole,
-            yearsExp,
-            topSkills,
-            achievement1,
-            achievement2,
-            education   : edu,
-            location    : p.location || '',
+          resumeData: {
+            name: resumeData?.personal?.fullName,
+            currentRole: resumeData?.experience?.[0]?.title,
+            topSkills: resumeData?.skills?.slice(0, 3).map(s => s.items).join(', '),
+            education: resumeData?.education?.[0]?.school
           },
+          existingLetter: letter,
+          refineInstruction
         }),
       })
 
       clearTimeout(timeoutId)
-
+      
       if (!res.ok) {
-        const err = await res.json().catch(() => null)
-        throw new Error(err?.error || `Generation failed (HTTP ${res.status})`)
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || `Generation failed (${res.status})`)
       }
 
-      const json = await res.json().catch(() => null)
-      if (!json?.ok || !json?.data?.letter) {
-        throw new Error(json?.error || 'AI returned empty response. Please try again.')
+      const data = await res.json()
+      if (!data?.ok) {
+        throw new Error(data?.error || 'AI Generation failed.')
       }
 
-      setLetter(json.data.letter)
-      setWordCount(json.data.wordCount || 0)
-      toast.success('Cover letter generated! ✨')
-
+      setLetter(data.data.letter)
+      trackEvent(EVENT_NAMES.COVER_LETTER_GENERATED, { company, jobTitle, refine: !!refineInstruction })
+      toast.success(refineInstruction ? 'Refined successfully! ✨' : 'Generated successfully! ✨')
     } catch (err) {
+      clearTimeout(timeoutId)
       if (err.name === 'AbortError') {
         toast.error('Generation timed out. Please try again.')
       } else {
-        toast.error(err.message || 'Generation failed. Please try again.')
+        toast.error(err.message || 'AI Generation failed. Please check your connection.')
       }
+      console.error('Generation Error Detail:', err)
     } finally {
       setIsGenerating(false)
     }
-  }, [jobTitle, company, jobDescription, tone, candidateName, currentRole, yearsExp, topSkills, achievement1, achievement2, edu, p.location])
+  }, [jobTitle, company, jobDescription, tone, resumeData, letter])
 
-  // ── Copy to clipboard ──────────────────────────────────────────
-  const handleCopy = () => {
-    if (!letter) { toast.error('Generate a cover letter first!'); return }
-    navigator.clipboard.writeText(letter)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-    toast.success('Copied to clipboard!')
-  }
-
-  // ── Download PDF ───────────────────────────────────────────────
-  const handleDownloadPDF = async () => {
+  const handleDownload = async () => {
     if (!isPro) {
-      toast.error('PDF download is a Pro feature. Upgrade to download!')
+      toast.error('Upgrade to Pro to download PDFs')
       return
     }
-    if (!letter) {
-      toast.error('Generate a cover letter first!')
-      return
-    }
-
     setIsExporting(true)
     try {
-      await exportToPDF(templateData, settings, TemplateComponent, `${candidateName || 'cover'}_cover_letter`, true)
-      toast.success('PDF downloaded!')
+      await exportToPDF(templateData, settings, TemplateComponent, `${company}_CoverLetter`, true)
+      toast.success('Cover Letter downloaded!')
     } catch (err) {
-      toast.error('PDF export failed. Please try again.')
+      toast.error('Download failed')
     } finally {
       setIsExporting(false)
     }
   }
 
+  // ── UI Components ──────────────────────────────────────────────
   return (
-    <div className="min-h-screen" style={{ background: 'linear-gradient(135deg, #F0F4FF 0%, #F8FAFC 50%, #F0FFF4 100%)' }}>
-      {/* Page header */}
-      <div className="border-b border-gray-100 bg-white/80 backdrop-blur-lg sticky top-[80px] z-30">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-violet-200">
-              <FileText size={18} className="text-white" />
-            </div>
-            <div>
-              <h1 className="text-lg font-black text-gray-950 tracking-tight">AI Cover Letter</h1>
-              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">India-Optimized · GPT-4</p>
-            </div>
-            {/* "New" badge */}
-            <span className="text-[9px] font-black uppercase tracking-widest bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200">
-              New
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {/* Template selector */}
-            <div className="hidden md:flex items-center gap-2 bg-gray-50 rounded-xl p-1 border border-gray-200">
-              {TEMPLATE_OPTIONS.map(t => (
+    <div className="flex h-screen bg-[#FDFDFF] overflow-hidden">
+      {/* ── Left Sidebar (Glassmorphic) ── */}
+      <aside className="w-[400px] border-r border-[#F0F2F5] bg-white flex flex-col z-20 shadow-xl shadow-slate-200/20">
+        {/* Sidebar Header */}
+        <div className="p-6 border-b border-[#F8FAFC]">
+          <div className="flex items-center justify-between mb-6">
+            <button 
+              onClick={() => navigate('/builder')}
+              className="p-2 hover:bg-slate-50 rounded-lg transition-colors border border-slate-100"
+            >
+              <ArrowLeft size={16} className="text-slate-500" />
+            </button>
+            <div className="flex bg-slate-100 rounded-xl p-1">
+              {['details', 'customize'].map(tab => (
                 <button
-                  key={t.id}
-                  onClick={() => setSelectedTemplate(t.id)}
-                  className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
-                    selectedTemplate === t.id
-                      ? 'bg-white shadow-sm text-gray-900'
-                      : 'text-gray-400 hover:text-gray-700'
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold capitalize transition-all ${
+                    activeTab === tab ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400'
                   }`}
                 >
-                  {t.label}
+                  {tab}
                 </button>
               ))}
             </div>
-
-            <Link to="/builder" className="px-4 py-2 text-xs font-black uppercase tracking-widest text-gray-500 hover:text-gray-900 bg-gray-50 rounded-xl hover:bg-gray-100 transition-all border border-gray-200">
-              ← Builder
-            </Link>
           </div>
-        </div>
-      </div>
 
-      {/* Main layout */}
-      <div className="max-w-7xl mx-auto flex h-[calc(100vh-144px)] overflow-hidden">
-        {/* ── Left panel: Form ─────────────────────────────────── */}
-        <div className="w-full md:w-[440px] flex-shrink-0 border-r border-gray-100 overflow-y-auto bg-white">
-          <div className="p-6 space-y-5">
-
-            {/* Job info section */}
-            <div>
-              <h2 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-3 flex items-center gap-2">
-                <Target size={12} /> Job Details
-              </h2>
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1.5">Job Title *</label>
-                  <input
-                    type="text"
-                    value={jobTitle}
-                    onChange={e => setJobTitle(e.target.value)}
-                    placeholder="e.g. Senior Software Engineer"
-                    className="w-full px-4 py-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1.5">Company Name *</label>
-                  <input
-                    type="text"
-                    value={company}
-                    onChange={e => setCompany(e.target.value)}
-                    placeholder="e.g. Infosys, Razorpay, Google India"
-                    className="w-full px-4 py-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1.5">
-                    Recipient Name
-                    <span className="text-gray-400 font-normal ml-1">(optional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={recipientName}
-                    onChange={e => setRecipientName(e.target.value)}
-                    placeholder="Hiring Manager"
-                    className="w-full px-4 py-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all"
-                  />
-                </div>
-              </div>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-violet-600 flex items-center justify-center text-white shadow-lg shadow-violet-200">
+              <FileText size={20} />
             </div>
-
-            {/* Job description */}
             <div>
-              <label className="block text-xs font-bold text-gray-600 mb-1.5 flex items-center gap-1.5">
-                <AlignLeft size={11} />
-                Paste Job Description
-                <span className="text-gray-400 font-normal">(optional but recommended)</span>
-              </label>
-              <textarea
-                value={jobDescription}
-                onChange={e => setJobDescription(e.target.value)}
-                placeholder="Paste the job description here for a more tailored letter..."
-                rows={5}
-                maxLength={2000}
-                className="w-full px-4 py-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all resize-none"
-              />
-              <div className="text-right text-[10px] text-gray-400 mt-1">
-                {jobDescription.length}/2000
-              </div>
+              <h1 className="text-base font-black text-slate-900 leading-none mb-1">Impact Letter</h1>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">AI Synthesis Engine</p>
             </div>
+          </div>
 
-            {/* Tone selector */}
-            <div>
-              <label className="block text-xs font-bold text-gray-600 mb-3 flex items-center gap-1.5">
-                Writing Tone
-                <span className="text-[9px] text-gray-400 font-normal">(affects style &amp; vocabulary)</span>
-              </label>
-              <div className="grid grid-cols-3 gap-2.5">
-                {TONE_OPTIONS.map(t => (
-                  <button
-                    key={t.value}
-                    onClick={() => setTone(t.value)}
-                    className={`relative px-3 py-3.5 rounded-2xl text-left transition-all border-2 group ${
-                      tone === t.value
-                        ? 'border-transparent shadow-lg'
-                        : 'border-gray-100 bg-white hover:border-gray-200 hover:shadow-sm'
-                    }`}
-                    style={tone === t.value ? {
-                      background: `linear-gradient(135deg, ${t.color}10 0%, ${t.color}18 100%)`,
-                      borderColor: t.color,
-                    } : {}}
+          {user && (
+            <div className="mt-4 flex flex-col gap-2">
+              <label htmlFor="cl-saved-version" className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Saved versions</label>
+              <div className="flex gap-2">
+                <div className="flex-1 min-w-0 relative">
+                  <select
+                    id="cl-saved-version"
+                    value={selectedLetterId}
+                    onChange={e => loadVersion(e.target.value)}
+                    className="w-full text-xs font-semibold rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 pr-10 text-slate-800 appearance-none"
                   >
-                    {/* Active indicator dot */}
-                    {tone === t.value && (
-                      <div className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full" style={{ background: t.color }} />
-                    )}
-                    <div className="text-lg mb-1.5">{t.icon}</div>
-                    <div className="text-xs font-black uppercase tracking-wider" style={tone === t.value ? { color: t.color } : { color: '#374151' }}>{t.label}</div>
-                    <div className="text-[9px] text-gray-400 mt-0.5 leading-tight">{t.description}</div>
-                  </button>
-                ))}
+                    <option value="">Current draft (unsaved)</option>
+                    {savedLetters.map(s => {
+                      const date = new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                      const displayText = `${s.title || 'Untitled'} - ${s.company || 'No Company'} (${date})`
+                      return <option key={s.id} value={s.id}>{displayText}</option>
+                    })}
+                  </select>
+                  {selectedLetterId && (
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteClick(selectedLetterId, e)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 hover:bg-red-50 rounded-lg transition-colors group"
+                      title="Delete this cover letter"
+                    >
+                      <Trash2 size={14} className="text-slate-400 group-hover:text-red-600" />
+                    </button>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveVersion}
+                  disabled={savingLetter}
+                  className="shrink-0 px-4 py-2 rounded-xl bg-violet-600 text-white text-[10px] font-black uppercase tracking-widest disabled:opacity-40 relative"
+                >
+                  {savingLetter ? (
+                    <Loader size={12} className="animate-spin" />
+                  ) : showSavedIndicator ? (
+                    <span className="flex items-center gap-1">
+                      <Check size={12} /> Saved
+                    </span>
+                  ) : (
+                    'Save'
+                  )}
+                </button>
               </div>
             </div>
-
-            {/* Candidate auto-filled from resume */}
-            {candidateName && (
-              <div className="p-4 bg-brand-50/60 rounded-xl border border-brand-100">
-                <h3 className="text-[10px] font-black uppercase tracking-widest text-brand-600 mb-2.5 flex items-center gap-1.5">
-                  <User size={10} /> Auto-filled from your resume
-                </h3>
-                <div className="space-y-1.5 text-xs text-gray-600">
-                  {candidateName && <div><span className="font-bold">Name:</span> {candidateName}</div>}
-                  {currentRole  && <div><span className="font-bold">Role:</span> {currentRole}</div>}
-                  {topSkills    && <div><span className="font-bold">Skills:</span> {topSkills.slice(0, 60)}…</div>}
-                  {edu          && <div><span className="font-bold">Education:</span> {edu.slice(0, 50)}…</div>}
-                </div>
-                <Link to="/builder" className="block mt-2 text-[10px] text-brand-600 font-bold hover:underline">
-                  Edit resume data →
-                </Link>
-              </div>
-            )}
-
-            {/* Generate button */}
-            <button
-              onClick={handleGenerate}
-              disabled={isGenerating || !jobTitle || !company}
-              className="w-full py-4 bg-gradient-to-r from-violet-500 to-indigo-600 text-white rounded-2xl font-black text-sm uppercase tracking-wider hover:shadow-xl hover:shadow-violet-200/80 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center justify-center gap-2.5 active:scale-95 shadow-lg shadow-violet-200/50"
-            >
-              {isGenerating
-                ? <><Loader size={16} className="animate-spin" /> Generating…</>
-                : <><Sparkles size={16} /> Generate with AI</>
-              }
-            </button>
-
-            {isGenerating && (
-              <p className="text-center text-xs text-gray-400 animate-pulse">
-                AI is crafting your cover letter… (~8-15 seconds)
-              </p>
-            )}
-          </div>
+          )}
         </div>
 
-        {/* ── Right panel: Preview ─────────────────────────────── */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
-          {/* Preview area */}
-          <div className="flex-1 overflow-y-auto p-6 flex justify-center">
-            <div className="w-full max-w-[794px]">
-              {/* Preview container */}
-              <div
-                className="bg-white shadow-2xl shadow-gray-200 rounded-2xl overflow-hidden"
-                style={{ transform: 'scale(0.78)', transformOrigin: 'top center', marginBottom: '-22%' }}
-              >
-                <TemplateComponent data={templateData} />
-              </div>
-
-              {/* Empty state */}
-              {!letter && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
-                  <div className="w-20 h-20 bg-violet-50 rounded-3xl flex items-center justify-center mb-4 shadow-inner">
-                    <FileText size={32} className="text-violet-300" />
+        {/* Scrollable Form Content */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+          {activeTab === 'details' ? (
+            <>
+              {/* Job Info Section */}
+              <section className="space-y-4">
+                <div className="flex items-center gap-2 text-slate-400 mb-2">
+                  <Target size={14} />
+                  <h3 className="text-[11px] font-black uppercase tracking-widest">Job Landscape</h3>
+                </div>
+                
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <label htmlFor="cl-job-title" className="text-[10px] font-black text-slate-500 uppercase tracking-wider ml-1 cursor-pointer">Target Role</label>
+                    <input 
+                      id="cl-job-title"
+                      name="jobTitle"
+                      type="text" 
+                      placeholder="e.g. Lead Architect"
+                      value={jobTitle}
+                      onChange={e => setJobTitle(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:bg-white focus:border-violet-500 focus:ring-4 focus:ring-violet-50 transition-all outline-none"
+                    />
                   </div>
-                  <h3 className="text-xl font-black text-gray-300 tracking-tight">Your cover letter preview</h3>
-                  <p className="text-gray-300 text-sm mt-2 max-w-xs">Fill in the form and click "Generate with AI" to create your letter</p>
+                  <div className="space-y-1.5">
+                    <label htmlFor="cl-company" className="text-[10px] font-black text-slate-500 uppercase tracking-wider ml-1 cursor-pointer">Company</label>
+                    <input 
+                      id="cl-company"
+                      name="company"
+                      type="text" 
+                      placeholder="e.g. Apple INC"
+                      value={company}
+                      onChange={e => setCompany(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:bg-white focus:border-violet-500 focus:ring-4 focus:ring-violet-50 transition-all outline-none"
+                    />
+                  </div>
+                </div>
+              </section>
+
+              {/* Job Description Section */}
+                <div className="relative space-y-1.5">
+                  <label htmlFor="cl-job-description" className="text-[10px] font-black text-slate-500 uppercase tracking-wider ml-1 cursor-pointer">Requirements (Optional)</label>
+                  <textarea 
+                    id="cl-job-description"
+                    name="jobDescription"
+                    rows={6}
+                    placeholder="Paste the job description here for hyper-tailored results..."
+                    value={jobDescription}
+                    onChange={e => setJobDescription(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm text-slate-800 placeholder:text-slate-300 focus:bg-white focus:border-violet-500 focus:ring-4 focus:ring-violet-50 transition-all outline-none resize-none"
+                  />
+                  <div className="absolute bottom-3 right-3 text-[9px] font-bold text-slate-300">
+                    {jobDescription.length}/2000
+                  </div>
+                </div>
+            </>
+          ) : (
+            <>
+              {/* Customize Tab: Templates & Tones */}
+              <section className="space-y-6">
+                <div>
+                  <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">
+                    <Layout size={14} /> Structural DNA
+                  </h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {TEMPLATE_OPTIONS.map(opt => (
+                      <button
+                        key={opt.id}
+                        onClick={() => setSelectedTemplate(opt.id)}
+                        className={`p-3 rounded-2xl border-2 transition-all flex items-center gap-2 ${
+                          selectedTemplate === opt.id 
+                            ? 'border-violet-600 bg-violet-50/50 text-violet-700 shadow-sm' 
+                            : 'border-slate-100 bg-white text-slate-400 hover:border-slate-200'
+                        }`}
+                      >
+                        {opt.icon}
+                        <span className="text-xs font-bold">{opt.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">
+                    <Wand2 size={14} /> Professional Voice
+                  </h3>
+                  <div className="space-y-2">
+                    {TONE_OPTIONS.map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setTone(opt.value)}
+                        className={`w-full p-4 rounded-3xl border-2 text-left transition-all relative overflow-hidden group ${
+                          tone === opt.value 
+                            ? 'border-violet-600 bg-white shadow-lg shadow-violet-100' 
+                            : 'border-slate-100 bg-white hover:border-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-lg">{opt.icon}</span>
+                          {tone === opt.value && <div className="w-1.5 h-1.5 rounded-full bg-violet-600" />}
+                        </div>
+                        <div className={`text-xs font-black uppercase tracking-wider ${tone === opt.value ? 'text-slate-900' : 'text-slate-500'}`}>
+                          {opt.label}
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-medium">{opt.description}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            </>
+          )}
+        </div>
+
+        {/* Sidebar Footer Action */}
+        <div className="p-6 border-t border-[#F8FAFC] bg-slate-50/50">
+          <button
+            onClick={handleGenerate}
+            disabled={isGenerating || isScanning}
+            className="w-full py-4 bg-[#0F172A] text-white rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all disabled:opacity-50 flex items-center justify-center gap-3 relative overflow-hidden group shadow-xl shadow-slate-200"
+          >
+            {isGenerating || isScanning ? (
+              <Loader size={16} className="animate-spin text-violet-400" />
+            ) : (
+              <>
+                <Sparkles size={16} className="group-hover:rotate-12 transition-transform" />
+                Synthesize Letter
+              </>
+            )}
+            
+            {/* Gloss shine effect */}
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+          </button>
+        </div>
+      </aside>
+
+      {/* ── Main Canvas (Preview/Editor) ── */}
+      <main className="flex-1 flex flex-col relative overflow-hidden bg-[#F0F2F5]">
+        {/* Top Control Bar */}
+        <header className="h-16 border-b border-[#E2E8F0] bg-white/80 backdrop-blur-md px-8 flex items-center justify-between z-10 sticky top-0">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${wordCount > 100 ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+              <span className="text-[11px] font-black text-slate-950 uppercase tracking-widest">{wordCount} Words</span>
+            </div>
+            <div className="w-px h-6 bg-slate-100" />
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-brand-50 rounded-full border border-brand-100">
+               <ShieldCheck size={12} className="text-brand-600" />
+               <span className="text-[10px] font-black text-brand-700 uppercase tracking-widest">Readable layout</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => {
+                navigator.clipboard.writeText(letter)
+                setCopied(true)
+                setTimeout(() => setCopied(false), 2000)
+                toast.success('Copied to clipboard')
+              }}
+              className="p-2.5 hover:bg-slate-100 rounded-xl transition-all text-slate-600 border border-slate-100 relative"
+            >
+              {copied ? <Check size={18} className="text-emerald-500" /> : <Copy size={18} />}
+            </button>
+            <button 
+              onClick={handleDownload}
+              disabled={!letter || isExporting}
+              className="flex items-center gap-2 px-6 py-2.5 bg-violet-600 text-white rounded-xl font-bold text-xs hover:bg-violet-700 transition-all shadow-lg shadow-violet-200 disabled:opacity-50"
+            >
+              {isExporting ? <Loader size={14} className="animate-spin" /> : <Download size={14} />}
+              Download PDF
+            </button>
+            {!isPro && (
+              <Link to="/upgrade" className="flex items-center gap-2 px-6 py-2.5 bg-amber-500 text-white rounded-xl font-bold text-xs hover:bg-amber-600 transition-all shadow-lg shadow-amber-200 uppercase tracking-widest">
+                <Crown size={14} /> Pro
+              </Link>
+            )}
+          </div>
+        </header>
+
+        {/* Scrollable Paper Area */}
+        <div className="flex-1 overflow-y-auto p-12 flex justify-center custom-scrollbar">
+          <div className="w-full max-w-[794px] relative">
+            {/* Holographic Scanning Overlay */}
+            <AnimatePresence>
+              {isScanning && (
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 z-40 bg-white/40 backdrop-blur-[2px] rounded-2xl overflow-hidden flex flex-col items-center justify-center"
+                >
+                  <div className="w-full h-1 bg-violet-100 absolute top-0 overflow-hidden">
+                    <motion.div 
+                      animate={{ x: ['-100%', '100%'] }}
+                      transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                      className="w-1/3 h-full bg-violet-600 blur-[4px]"
+                    />
+                  </div>
+                  <div className="text-center p-8 bg-white/90 shadow-2xl rounded-3xl border border-violet-100 max-w-sm">
+                    <div className="relative w-16 h-16 mx-auto mb-6">
+                      <motion.div 
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+                        className="absolute inset-0 rounded-full border-2 border-dashed border-violet-600 opacity-20"
+                      />
+                      <div className="absolute inset-2 rounded-full border-2 border-violet-600 animate-pulse flex items-center justify-center">
+                        <Target size={24} className="text-violet-600" />
+                      </div>
+                    </div>
+                    <h4 className="text-lg font-black text-slate-900 mb-2">Analyzing Job DNA</h4>
+                    <p className="text-xs text-slate-400 font-medium leading-relaxed">Synthesizing personal achievements with job requirements for maximum impact...</p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* AI Generation State */}
+            <AnimatePresence>
+              {isGenerating && (
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="absolute inset-0 z-30 bg-white/40 backdrop-blur-[1px] flex items-center justify-center"
+                >
+                  <div className="flex flex-col items-center gap-4">
+                     <div className="p-4 bg-white shadow-2xl rounded-3xl border border-slate-100">
+                       <Loader size={32} className="animate-spin text-violet-600" />
+                     </div>
+                     <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 animate-pulse">Drafting Masterpiece</span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* The Actual Document Canvas */}
+            <motion.div 
+              initial={false}
+              animate={isGenerating ? { scale: 0.98, opacity: 0.8 } : { scale: 1, opacity: 1 }}
+              className={`bg-white shadow-2xl shadow-slate-300/50 rounded-2xl overflow-hidden transition-all duration-300 transform-gpu relative ${!letter ? 'h-[1123px]' : ''}`}
+            >
+              {/* Paper Background Visuals */}
+              <div className="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none">
+                <FileText size={400} />
+              </div>
+              
+              {/* Template Render */}
+              <TemplateComponent data={templateData} />
+
+              {/* JD Linkage Indicator (Subtle badge on paper) */}
+              {jobDescription && !letter && (
+                <div className="absolute top-8 left-8 flex items-center gap-2 bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-full border border-emerald-100 animate-pulse-subtle">
+                  <Target size={12} />
+                  <span className="text-[10px] font-black uppercase tracking-widest">JD Sync: Active</span>
                 </div>
               )}
-            </div>
-          </div>
 
-          {/* Bottom action bar */}
-          <div className="border-t border-gray-200 bg-white px-6 py-4 flex items-center justify-between gap-4 shadow-lg shadow-gray-100/50">
-            {/* Word count */}
-            <div className="flex items-center gap-2">
-              {letter ? (
-                <>
-                  <div className={`w-2 h-2 rounded-full ${wordCount >= 250 && wordCount <= 320 ? 'bg-emerald-500' : 'bg-amber-400'}`} />
-                  <span className="text-sm font-bold text-gray-700">{wordCount} words</span>
-                  <span className="text-xs text-gray-400">(target: 250–320)</span>
-                </>
-              ) : (
-                <span className="text-sm text-gray-400">—</span>
-              )}
-            </div>
+              {/* Toolbar for AI Refinement (Visible when text is selected or letter exists) */}
+              <AnimatePresence>
+                {letter && !isGenerating && !isScanning && (
+                  <motion.div 
+                    initial={{ y: 20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    className="absolute bottom-12 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-3 rounded-full flex items-center gap-6 shadow-2xl z-10 border border-white/10"
+                  >
+                    <div className="flex items-center gap-2 border-r border-white/10 pr-6">
+                       <Wand2 size={14} className="text-violet-400" />
+                       <span className="text-[10px] font-black uppercase tracking-widest">AI Magic</span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                       <button 
+                         onClick={() => handleGenerate()} 
+                         className="text-[10px] font-black uppercase tracking-widest hover:text-violet-400 transition-colors flex items-center gap-1.5"
+                       >
+                         <RefreshCw size={10} className={isGenerating ? 'animate-spin' : ''} /> Regenerate
+                       </button>
+                       <button 
+                         onClick={() => handleGenerate('Make it shorter and more concise')}
+                         className="text-[10px] font-black uppercase tracking-widest hover:text-violet-400 transition-colors flex items-center gap-1.5"
+                       >
+                         <Zap size={10} /> Shorten
+                       </button>
+                       <button 
+                         onClick={() => handleGenerate('Make it more professional and executive-level')}
+                         className="text-[10px] font-black uppercase tracking-widest hover:text-violet-400 transition-colors flex items-center gap-1.5"
+                       >
+                         <Briefcase size={10} /> Professionalize
+                       </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
 
-            {/* Actions */}
-            <div className="flex items-center gap-3">
-              {/* Regenerate */}
-              {letter && (
-                <button
-                  onClick={handleGenerate}
-                  disabled={isGenerating}
-                  className="flex items-center gap-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-gray-600 bg-gray-50 border border-gray-200 rounded-xl hover:bg-gray-100 transition-all disabled:opacity-50"
+            {/* Empty State Mockup - Interactive */}
+            {!letter && !isGenerating && !isScanning && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <div className="opacity-5 mb-8 pointer-events-none">
+                  <FileText size={160} />
+                </div>
+                <h3 className="text-4xl font-black text-slate-100 uppercase tracking-tighter mb-12 pointer-events-none">Your Impact Letter</h3>
+                
+                <motion.div 
+                  initial={{ y: 20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  className="flex flex-col items-center gap-4 z-10"
                 >
-                  <RefreshCw size={12} className={isGenerating ? 'animate-spin' : ''} />
-                  Regenerate
-                </button>
-              )}
-
-              {/* Copy */}
-              <button
-                onClick={handleCopy}
-                disabled={!letter}
-                className="flex items-center gap-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-all disabled:opacity-30"
-              >
-                {copied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
-                {copied ? 'Copied!' : 'Copy Text'}
-              </button>
-
-              {/* Download PDF */}
-              {isPro ? (
-                <button
-                  onClick={handleDownloadPDF}
-                  disabled={!letter || isExporting}
-                  className="flex items-center gap-2 px-5 py-2.5 text-xs font-black uppercase tracking-wider text-white bg-gray-950 rounded-xl hover:bg-black transition-all disabled:opacity-40 shadow-lg shadow-gray-300"
-                >
-                  {isExporting
-                    ? <><Loader size={12} className="animate-spin" /> Exporting…</>
-                    : <><Download size={12} /> Download PDF</>
-                  }
-                </button>
-              ) : (
-                <Link
-                  to="/upgrade"
-                  className="flex items-center gap-2 px-5 py-2.5 text-xs font-black uppercase tracking-wider text-white bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl hover:shadow-lg hover:-translate-y-0.5 transition-all shadow-lg shadow-amber-200"
-                >
-                  <Crown size={12} />
-                  Upgrade for PDF
-                </Link>
-              )}
-            </div>
+                  <button 
+                    onClick={() => handleGenerate()}
+                    className="flex items-center gap-3 px-10 py-5 bg-white border-2 border-slate-100 text-slate-900 rounded-[2rem] font-black text-sm uppercase tracking-widest hover:border-violet-600 hover:text-violet-600 transition-all shadow-2xl shadow-slate-200 active:scale-95 group"
+                  >
+                    <Sparkles size={20} className="text-violet-500 group-hover:rotate-12 transition-transform" />
+                    Draft with AI
+                  </button>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">or start typing directly on the paper</p>
+                </motion.div>
+              </div>
+            )}
           </div>
         </div>
-      </div>
+      </main>
+
+      {/* ── Global Styles for Custom Scrollbar ── */}
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #E2E8F0; border-radius: 99px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #CBD5E1; }
+      `}</style>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        open={showDeleteConfirm}
+        title="Delete this cover letter?"
+        message={letterToDelete ? `"${letterToDelete.title}" will be permanently deleted.` : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        danger
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => {
+          setShowDeleteConfirm(false)
+          setLetterToDelete(null)
+        }}
+      />
     </div>
   )
 }

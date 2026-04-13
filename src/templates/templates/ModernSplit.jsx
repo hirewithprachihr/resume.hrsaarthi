@@ -9,7 +9,7 @@ export default function ModernSplit({ data, settings }) {
     <div className="resume-canvas bg-white text-slate-800" style={{ fontFamily: '"Helvetica Neue", Helvetica, sans-serif' }}>
       
       {/* HEADER SECTION */}
-      <header className="p-8 pb-6 flex items-end justify-between" style={{ borderBottom: `4px solid ${accent}` }}>
+      <header className="p-10 pb-6 flex items-end justify-between" style={{ borderBottom: `4px solid ${accent}` }}>
         <div className="flex-1 pr-6 border-r border-slate-200">
           <h1 className="text-[36px] leading-tight font-black text-slate-900 tracking-tighter uppercase mb-1">
             {personal.fullName || 'FULL NAME'}
@@ -31,7 +31,7 @@ export default function ModernSplit({ data, settings }) {
       <div className="flex w-full" style={{ minHeight: '800px' }}>
         
         {/* LEFT COLUMN: MAIN CONTENT */}
-        <div className="w-[65%] p-8 pr-6 space-y-6 border-r border-slate-100">
+        <div className="w-[65%] p-10 pt-8 pr-6 space-y-6 border-r border-slate-100">
           
           {personal.summary && (
             <section className="resume-section">

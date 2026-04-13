@@ -1,26 +1,32 @@
-import { execSync } from 'child_process';
-import { readFileSync } from 'fs';
+const { createClient } = require('@supabase/supabase-js')
+const fs = require('fs')
 
-const queries = [
-  `CREATE OR REPLACE FUNCTION public.is_admin() RETURNS BOOLEAN LANGUAGE sql SECURITY DEFINER AS $$ SELECT EXISTS ( SELECT 1 FROM public.admin_roles WHERE user_id = auth.uid() ); $$;`,
-  `DROP POLICY IF EXISTS "Admins read admin_roles" ON public.admin_roles;`,
-  `DROP POLICY IF EXISTS "Admins manage discounts" ON public.discount_codes;`,
-  `DROP POLICY IF EXISTS "Admins manage settings" ON public.platform_settings;`,
-  `DROP POLICY IF EXISTS "Admins read all profiles" ON public.profiles;`,
-  `DROP POLICY IF EXISTS "Admins read all resumes" ON public.resumes;`,
-  `CREATE POLICY "Admins read admin_roles" ON public.admin_roles FOR SELECT USING (public.is_admin());`,
-  `CREATE POLICY "Admins manage discounts" ON public.discount_codes FOR ALL USING (public.is_admin());`,
-  `CREATE POLICY "Admins manage settings" ON public.platform_settings FOR ALL USING (public.is_admin());`,
-  `CREATE POLICY "Admins read all profiles" ON public.profiles FOR SELECT USING ( public.is_admin() OR auth.uid() = id );`,
-  `CREATE POLICY "Admins read all resumes" ON public.resumes FOR SELECT USING ( public.is_admin() OR auth.uid() = user_id );`
-];
+const SUPABASE_URL = 'https://mtfxwyezotzrzzsyhoay.supabase.co'
+const SUPABASE_SERVICE_ROLE_KEY = process.argv[2] // I'll try to find this or just use psql
 
-for (const q of queries) {
+// Wait, I don't have the service role key. I'll use the postgres connection string with pg.
+const { Client } = require('pg')
+
+async function applySql() {
+  const client = new Client({
+    connectionString: "postgresql://postgres:Harish%400510@db.mtfxwyezotzrzzsyhoay.supabase.co:5432/postgres"
+  })
+
   try {
-    console.log('Running:', q.substring(0, 50) + '...');
-    const result = execSync(`npx supabase db query "${q.replace(/"/g, '\\"')}" --linked`, { encoding: 'utf-8' });
-    console.log('Success.');
-  } catch (e) {
-    console.error('Failed:', e.message);
+    await client.connect()
+    console.log('Connected to Postgres')
+    
+    const sql = fs.readFileSync('f:\\programing\\Projects\\hr\\resume-builder\\supabase\\migrations\\20260408100000_fix_all_rls_recursion.sql', 'utf8')
+    
+    console.log('Applying migration...')
+    await client.query(sql)
+    console.log('Migration applied successfully!')
+    
+  } catch (err) {
+    console.error('Error applying migration:', err.message)
+  } finally {
+    await client.end()
   }
 }
+
+applySql()

@@ -62,7 +62,10 @@ export default function SharePage() {
           </div>
           <div>
             <h1 className="text-sm font-black text-gray-900 leading-none">{data.personal.fullName || 'Professional Resume'}</h1>
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Verified via HR Saarthi</p>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Shared profile</p>
+            {resume.updatedAt && (
+              <p className="text-[9px] text-gray-400 mt-0.5">Last updated {new Date(resume.updatedAt).toLocaleString('en-IN', { dateStyle: 'medium' })}</p>
+            )}
           </div>
         </div>
 
@@ -85,13 +88,13 @@ export default function SharePage() {
       {/* Main Content */}
       <div className="max-w-5xl mx-auto px-4 pt-10 flex flex-col items-center">
         {/* Verification Badge */}
-        <div className="mb-8 inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 border border-emerald-100 rounded-full text-emerald-700 text-[10px] font-black uppercase tracking-widest shadow-sm">
-          <ShieldCheck size={14} /> Authentic Resume Document
+        <div className="mb-8 inline-flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-100 rounded-full text-slate-600 text-[10px] font-black uppercase tracking-widest shadow-sm">
+          <ShieldCheck size={14} /> Hosted on HR Saarthi
         </div>
 
         {/* Resume Canvas */}
         <div className="bg-white shadow-2xl shadow-gray-200/50 rounded-sm relative overflow-hidden ring-1 ring-gray-200">
-          <div className="w-[794px] bg-white">
+          <div className="w-[794px] bg-white resume-a4">
             <ErrorBoundary>
               <ResumeComponent data={data} settings={settings} />
             </ErrorBoundary>
@@ -108,7 +111,7 @@ export default function SharePage() {
              <span className="font-display text-sm text-gray-900">HR Saarthi</span>
           </Link>
           <p className="text-[10px] text-gray-400 mt-4 leading-relaxed max-w-xs mx-auto italic">
-            This resume was generated using our award-winning ATS technology. Build yours for free at hrsaarthi.com
+            This page was created by the candidate using HR Saarthi. Content has not been independently verified by HR Saarthi.
           </p>
         </div>
       </div>

@@ -11,10 +11,11 @@ export default function UploadResumeModal({ onClose }) {
   const [file, setFile] = useState(null)
   const [status, setStatus] = useState('idle') // idle | parsing | success | error
   const [error, setError] = useState('')
+  const [consentChecked, setConsentChecked] = useState(false)
   const [progress, setProgress] = useState(0)
   const [progressLabel, setProgressLabel] = useState('Reading file...')
   const fileRef = useRef(null)
-  const { fillFromParsed } = useResumeStore()
+  const { fillFromParsed, markAiAssistUsed } = useResumeStore()
   const { plan, testMode } = useAuthStore()
 
   const handleFile = (f) => {
@@ -39,6 +40,10 @@ export default function UploadResumeModal({ onClose }) {
 
   const handleParse = async () => {
     if (!file) return
+    if (!consentChecked) {
+      setError('Please consent to secure server processing before continuing.')
+      return
+    }
 
     // Pro gate — free users cannot use AI parse
     if (plan !== 'pro' && !testMode) {
@@ -100,6 +105,7 @@ export default function UploadResumeModal({ onClose }) {
     if (parsed) {
       try {
         fillFromParsed(parsed)
+        markAiAssistUsed()
         setProgress(100)
         setProgressLabel('Complete!')
         setStatus('success')
@@ -152,7 +158,15 @@ export default function UploadResumeModal({ onClose }) {
               onDrop={handleDrop}
               onClick={() => fileRef.current?.click()}
             >
-              <input ref={fileRef} type="file" accept=".pdf,.docx,.txt" className="hidden" onChange={e => handleFile(e.target.files[0])} />
+              <input
+                id="resume-file-upload"
+                name="resume-file"
+                ref={fileRef}
+                type="file"
+                accept=".pdf,.docx,.txt"
+                className="hidden"
+                onChange={e => handleFile(e.target.files[0])}
+              />
               {file ? (
                 <div className="flex flex-col items-center gap-4">
                   <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center border border-brand-100">
@@ -250,7 +264,7 @@ export default function UploadResumeModal({ onClose }) {
               </button>
               <button
                 onClick={handleParse}
-                disabled={!file}
+                disabled={!file || !consentChecked}
                 className="flex-2 px-10 py-4 text-xs font-black uppercase tracking-widest text-white bg-gray-950 rounded-2xl hover:bg-black hover:shadow-2xl hover:-translate-y-0.5 transition-all disabled:opacity-30 disabled:translate-y-0 flex items-center justify-center gap-3 active:scale-95 shadow-premium"
               >
                 <Sparkles size={16} />Extract with AI
@@ -268,6 +282,22 @@ export default function UploadResumeModal({ onClose }) {
               <Shield size={10} className="text-emerald-500" /> Encrypted in transit • Processed securely on servers
             </span>
           </div>
+
+          {status === 'idle' && (
+            <label htmlFor="data-consent-checkbox" className="flex items-start gap-2.5 text-[11px] text-gray-500 leading-relaxed cursor-pointer">
+              <input
+                id="data-consent-checkbox"
+                name="data-consent"
+                type="checkbox"
+                checked={consentChecked}
+                onChange={(e) => setConsentChecked(e.target.checked)}
+                className="mt-0.5 w-4 h-4 text-brand-600 rounded border-gray-300"
+              />
+              <span>
+                I consent to securely processing this file on server infrastructure to extract resume fields.
+              </span>
+            </label>
+          )}
         </div>
       </motion.div>
     </div>

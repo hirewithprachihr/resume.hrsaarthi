@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Users, FileText, CreditCard, TrendingUp, Activity, Eye, Download, ArrowUpRight, Loader } from 'lucide-react'
-import { fetchAllUsers, fetchAllResumes, fetchPayments } from '../../services/adminApi'
+import { fetchAllUsers, fetchAllResumes, fetchPayments, fetchEventCounts } from '../../services/adminApi'
 import { Link } from 'react-router-dom'
 
 function StatCard({ label, value, sub, icon: Icon, color, to, loading }) {
@@ -54,10 +54,26 @@ export default function AdminOverview() {
   const [resumes, setResumes] = useState([])
   const [payments, setPayments] = useState([])
   const [loading, setLoading] = useState(true)
+  const [eventCounts7d, setEventCounts7d] = useState({})
+  const [eventCounts30d, setEventCounts30d] = useState({})
 
   useEffect(() => {
-    Promise.all([fetchAllUsers(), fetchAllResumes(), fetchPayments()])
-      .then(([u, r, p]) => { setUsers(u); setResumes(r); setPayments(p) })
+    const since7 = new Date(Date.now() - 7 * 86400000).toISOString()
+    const since30 = new Date(Date.now() - 30 * 86400000).toISOString()
+    Promise.all([
+      fetchAllUsers(),
+      fetchAllResumes(),
+      fetchPayments(),
+      fetchEventCounts(since7).catch(() => ({})),
+      fetchEventCounts(since30).catch(() => ({})),
+    ])
+      .then(([u, r, p, e7, e30]) => {
+        setUsers(u)
+        setResumes(r)
+        setPayments(p)
+        setEventCounts7d(e7 || {})
+        setEventCounts30d(e30 || {})
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [])
@@ -85,6 +101,24 @@ export default function AdminOverview() {
         <StatCard label="Pro Subscribers"  value={loading ? '—' : proUsers}         sub={`${freeUsers} on Free plan`}              icon={TrendingUp} color="#0EC8A0" to="/admin/plans"    loading={loading} />
         <StatCard label="Total Resumes"    value={loading ? '—' : resumes.length}   sub="Across all users"                         icon={FileText}  color="#D4A843"  to="/admin/resumes"  loading={loading} />
         <StatCard label="Est. Revenue"     value={loading ? '—' : `₹${revenue.toLocaleString('en-IN')}`} sub="Based on Pro subs"  icon={CreditCard} color="#EC4899" to="/admin/payments"  loading={loading} />
+      </div>
+
+      {/* Product events funnel (last 7 days) */}
+      <div className="rounded-2xl p-5" style={{ background: '#13152A', border: '1px solid rgba(255,255,255,0.07)' }}>
+        <h3 className="text-sm font-black text-white mb-4">Product events (7d)</h3>
+        {loading ? (
+          <div className="h-16 rounded-xl animate-pulse" style={{ background: 'rgba(255,255,255,0.05)' }} />
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {['export_pdf', 'resume_saved', 'cover_letter_generated', 'upgrade_click', 'jd_pasted', 'tailor_to_job_started'].map(key => (
+              <div key={key} className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                <div className="text-[9px] font-bold uppercase tracking-widest text-white/35 mb-1 truncate" title={key}>{key.replace(/_/g, ' ')}</div>
+                <div className="text-xl font-black text-white">{eventCounts7d[key] ?? 0}</div>
+                <div className="text-[9px] text-white/25">30d: {eventCounts30d[key] ?? 0}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Two-column layout */}

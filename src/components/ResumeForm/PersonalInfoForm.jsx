@@ -1,12 +1,12 @@
 import { useState, useRef, useCallback } from 'react'
 import { Sparkles, CheckCircle, AlertCircle, RefreshCw, BookOpen, X, Camera, Github, Twitter, Trash2 } from 'lucide-react'
 import { useResumeStore } from '../../store/resumeStore'
-import { useAuthStore } from '../../store/authStore'
 import { generateSummary } from '../../services/aiEnhancer'
 import { getSummaryTemplates } from '../../data/contentLibrary'
 import { AnimatePresence, motion } from 'framer-motion'
 import { compressPhoto } from '../../utils/imageCompressor'
 import ProGate, { ProBadge } from '../ProGate'
+import { useEntitlements } from '../../utils/entitlements'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
 
@@ -26,13 +26,14 @@ function isValidLinkedIn(url) {
 }
 
 export default function PersonalInfoForm() {
-  const { resumeData, updatePersonal } = useResumeStore()
-  const { plan, testMode } = useAuthStore()
+  const { resumeData, updatePersonal, markAiAssistUsed } = useResumeStore()
+  const { isPro } = useEntitlements()
   const { personal } = resumeData
 
   const [generatingSummary, setGeneratingSummary] = useState(false)
   const [showExamples, setShowExamples]           = useState(false)
   const [photoUploading, setPhotoUploading]       = useState(false)
+  const [prefsOpen, setPrefsOpen]                 = useState(false)
   const fileInputRef = useRef(null)
 
   // ── Photo upload & compress ─────────────────────────────────────
@@ -80,8 +81,6 @@ export default function PersonalInfoForm() {
 
   const summaryQuality = getSummaryQuality(personal.summary || '')
   const linkedInValid  = isValidLinkedIn(personal.linkedin || '')
-  const isPro = plan === 'pro' || testMode
-
   const handleGenerateSummary = async () => {
     if (!isPro) return
     if (!resumeData.personal.jobTitle && resumeData.experience.length === 0) {
@@ -92,6 +91,7 @@ export default function PersonalInfoForm() {
     try {
       const summary = await generateSummary(resumeData)
       updatePersonal({ summary })
+      markAiAssistUsed()
       toast.success('AI summary generated!')
     } catch (err) {
       toast.error(err.message || 'AI generation failed. Check your API key.')
@@ -263,7 +263,7 @@ export default function PersonalInfoForm() {
                 }
               </button>
             ) : (
-              <ProGate feature="AI Summary Generator">
+              <ProGate feature="AI Summary Generator" compact>
                 <button className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-400 text-[10px] font-black rounded-xl cursor-not-allowed uppercase tracking-wider">
                   <Sparkles size={11} /> AI Generate <ProBadge />
                 </button>
@@ -310,6 +310,180 @@ export default function PersonalInfoForm() {
                 background: summaryQuality.color,
               }}
             />
+          </div>
+        )}
+      </div>
+
+      {/* Job search preferences (optional) — HR screening fields */}
+      <div className="rounded-2xl border border-gray-100 bg-gray-50/40 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setPrefsOpen(o => !o)}
+          className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50/80 transition-colors"
+        >
+          <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">Job search preferences (optional)</span>
+          <span className="text-gray-400 text-xs">{prefsOpen ? '−' : '+'}</span>
+        </button>
+        {prefsOpen && (
+          <div className="px-4 pb-4 space-y-3 border-t border-gray-100 pt-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="years-exp" className="label">Years of experience</label>
+                <input
+                  id="years-exp"
+                  className="input-field"
+                  placeholder="e.g. 6"
+                  value={personal.yearsExperience || ''}
+                  onChange={e => updatePersonal({ yearsExperience: e.target.value })}
+                />
+              </div>
+              <div>
+                <label htmlFor="notice" className="label">Notice period</label>
+                <select
+                  id="notice"
+                  className="input-field"
+                  value={personal.noticePeriodDays || ''}
+                  onChange={e => updatePersonal({ noticePeriodDays: e.target.value })}
+                >
+                  <option value="">Prefer not to say</option>
+                  <option value="immediate">Immediate</option>
+                  <option value="15">15 days</option>
+                  <option value="30">30 days</option>
+                  <option value="60">60 days</option>
+                  <option value="90">90 days</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label htmlFor="work-auth" className="label">Work authorization</label>
+              <select
+                id="work-auth"
+                className="input-field"
+                value={personal.workAuthorization || ''}
+                onChange={e => updatePersonal({ workAuthorization: e.target.value })}
+              >
+                <option value="">Prefer not to say</option>
+                <option value="citizen">Citizen</option>
+                <option value="pr">Permanent resident</option>
+                <option value="visa">Work visa</option>
+              </select>
+            </div>
+            {(personal.workAuthorization === 'visa') && (
+              <div>
+                <label htmlFor="visa-type" className="label">Visa type</label>
+                <input
+                  id="visa-type"
+                  className="input-field"
+                  placeholder="e.g. Employment pass"
+                  value={personal.visaType || ''}
+                  onChange={e => updatePersonal({ visaType: e.target.value })}
+                />
+              </div>
+            )}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={!!personal.openToRelocate}
+                onChange={e => updatePersonal({ openToRelocate: e.target.checked })}
+                className="w-4 h-4 rounded border-gray-300"
+              />
+              <span className="text-xs font-medium text-gray-700">Open to relocation</span>
+            </label>
+            {personal.openToRelocate && (
+              <div>
+                <label htmlFor="reloc-cities" className="label">Preferred cities / regions</label>
+                <input
+                  id="reloc-cities"
+                  className="input-field"
+                  placeholder="e.g. Bangalore, Hyderabad"
+                  value={personal.relocationCities || ''}
+                  onChange={e => updatePersonal({ relocationCities: e.target.value })}
+                />
+              </div>
+            )}
+            <div>
+              <span className="label">Work mode</span>
+              <div className="flex flex-wrap gap-2 mt-1">
+                {[
+                  { v: '', l: 'No preference' },
+                  { v: 'remote', l: 'Remote' },
+                  { v: 'hybrid', l: 'Hybrid' },
+                  { v: 'onsite', l: 'On-site' },
+                ].map(({ v, l }) => (
+                  <button
+                    key={v || 'x'}
+                    type="button"
+                    onClick={() => updatePersonal({ preferredWorkMode: v })}
+                    className={clsx(
+                      'px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wide border transition-all',
+                      (personal.preferredWorkMode || '') === v
+                        ? 'bg-gray-900 text-white border-gray-900'
+                        : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300',
+                    )}
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-xl bg-amber-50/80 border border-amber-100 px-3 py-2">
+              <p className="text-[10px] font-bold text-amber-800 mb-2">Expected compensation (optional — sensitive)</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label htmlFor="ccy" className="text-[9px] text-gray-500">Currency</label>
+                  <select
+                    id="ccy"
+                    className="input-field text-sm py-1.5"
+                    value={personal.expectedCompensation?.currency || 'INR'}
+                    onChange={e => updatePersonal({
+                      expectedCompensation: { ...personal.expectedCompensation, currency: e.target.value },
+                    })}
+                  >
+                    <option value="INR">INR</option>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="comp-period" className="text-[9px] text-gray-500">Period</label>
+                  <select
+                    id="comp-period"
+                    className="input-field text-sm py-1.5"
+                    value={personal.expectedCompensation?.period || 'annual'}
+                    onChange={e => updatePersonal({
+                      expectedCompensation: { ...personal.expectedCompensation, period: e.target.value },
+                    })}
+                  >
+                    <option value="annual">Annual (LPA / year)</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="min-c" className="text-[9px] text-gray-500">Min</label>
+                  <input
+                    id="min-c"
+                    className="input-field text-sm py-1.5"
+                    placeholder="Min"
+                    value={personal.expectedCompensation?.min ?? ''}
+                    onChange={e => updatePersonal({
+                      expectedCompensation: { ...personal.expectedCompensation, min: e.target.value },
+                    })}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="max-c" className="text-[9px] text-gray-500">Max</label>
+                  <input
+                    id="max-c"
+                    className="input-field text-sm py-1.5"
+                    placeholder="Max"
+                    value={personal.expectedCompensation?.max ?? ''}
+                    onChange={e => updatePersonal({
+                      expectedCompensation: { ...personal.expectedCompensation, max: e.target.value },
+                    })}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
