@@ -16,7 +16,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Brain, ChevronDown, ChevronUp, Eye, EyeOff, Loader, Sparkles,
   CheckCircle2, Lock, Crown, Target, Users, DollarSign,
-  RefreshCw, Lightbulb, Trophy,
+  RefreshCw, Lightbulb, Trophy, Zap, AlertCircle,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useResumeStore } from '../store/resumeStore'
@@ -220,6 +220,32 @@ export default function InterviewPrepPage() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [questions, setQuestions]   = useState(null)
   const [practiced, setPracticed]   = useState({}) // { "technical-0": true, ... }
+  const [showBulletHints, setShowBulletHints] = useState(true)
+
+  // Extract resume bullets with their experience context
+  const resumeBullets = (resumeData?.experience || []).flatMap(exp =>
+    (exp.bullets || []).filter(b => b?.trim().length > 20).map(bullet => ({
+      bullet,
+      role   : exp.title || '',
+      company: exp.company || '',
+    }))
+  ).slice(0, 6)
+
+  // Generate resume-anchored question hints from bullets
+  const bulletHints = resumeBullets.map(({ bullet, role, company }) => {
+    const hasMetric = /\d+|%|₹|\$|lakh|crore/i.test(bullet)
+    const hasLead   = /\b(led|managed|owned|headed|drove|orchestrated|spearheaded)\b/i.test(bullet)
+    const hasImpact = /\b(improved|reduced|increased|saved|delivered|built|launched)\b/i.test(bullet)
+    const questions = []
+
+    // Generic template driven from bullet content
+    questions.push(`"Tell me more about: ${bullet.slice(0, 70)}${bullet.length > 70 ? '…' : ''}" — Be ready to go 2 levels deeper.`)
+    if (hasMetric)  questions.push('"How did you measure that result? What was your methodology?"')
+    if (hasLead)    questions.push('"What was the biggest challenge with that team/initiative?"')
+    if (hasImpact)  questions.push('"What would have happened if you hadn\'t made this change?"')
+
+    return { bullet, role, company, questions }
+  })
 
   const p = resumeData?.personal || {}
   const skills = (resumeData?.skills || []).slice(0, 3).map(s => s.items).join(', ')
@@ -438,6 +464,60 @@ export default function InterviewPrepPage() {
             </p>
           )}
         </div>
+
+        {/* ── Resume-Anchored Question Hints ─── */}
+        {bulletHints.length > 0 && (
+          <div className="mb-6 bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+            <button
+              onClick={() => setShowBulletHints(!showBulletHints)}
+              className="w-full flex items-center gap-3 px-5 py-4 hover:bg-gray-50 transition-colors"
+            >
+              <div className="w-8 h-8 bg-indigo-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                <Zap size={14} className="text-indigo-600" />
+              </div>
+              <div className="flex-1 text-left">
+                <div className="text-sm font-black text-gray-900">Resume-Anchored Questions</div>
+                <div className="text-[10px] text-gray-400 font-medium mt-0.5">
+                  Questions interviewers WILL ask based on your actual resume bullets
+                </div>
+              </div>
+              <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                {bulletHints.length} bullets analyzed
+              </span>
+              {showBulletHints ? <ChevronUp size={14} className="text-gray-400 flex-shrink-0" /> : <ChevronDown size={14} className="text-gray-400 flex-shrink-0" />}
+            </button>
+
+            {showBulletHints && (
+              <div className="border-t border-gray-100 divide-y divide-gray-50">
+                {bulletHints.map((hint, i) => (
+                  <div key={i} className="px-5 py-4">
+                    <div className="flex items-start gap-3 mb-3">
+                      <div className="w-5 h-5 rounded-full bg-gray-900 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <span className="text-[9px] font-black text-white">{i + 1}</span>
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                          {hint.role}{hint.company ? ` · ${hint.company}` : ''}
+                        </div>
+                        <p className="text-xs text-gray-700 font-medium italic leading-relaxed">
+                          "{hint.bullet}"
+                        </p>
+                      </div>
+                    </div>
+                    <div className="ml-8 space-y-1.5">
+                      {hint.questions.map((q, qi) => (
+                        <div key={qi} className="flex items-start gap-2 p-2.5 bg-amber-50 border border-amber-100 rounded-xl">
+                          <AlertCircle size={11} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                          <p className="text-[10px] text-amber-800 font-medium leading-relaxed">{q}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Free user preview ─── */}
         {!isPro && (

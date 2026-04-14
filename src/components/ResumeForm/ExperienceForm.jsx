@@ -205,6 +205,18 @@ export default function ExperienceForm() {
                               </div>
                               
                               <div className="absolute right-2 -bottom-5 flex items-center gap-2">
+                                {/* Quality Hints */}
+                                {bullet.length > 10 && !/^(built|developed|managed|led|created|designed|implemented|achieved|reduced|increased|improved|orchestrated|spearheaded|drove)/i.test(bullet.trim()) && (
+                                  <span className="text-[9px] font-bold uppercase tracking-tight text-amber-500" title="Start with a strong action verb like 'Developed', 'Led', 'Reduced'">
+                                    ⚠️ Weak Verbs
+                                  </span>
+                                )}
+                                {bullet.length > 10 && !/\d|₹|%|lakh|cr/i.test(bullet) && (
+                                  <span className="text-[9px] font-bold uppercase tracking-tight text-amber-500" title="Add a number, percentage, or currency to prove impact">
+                                    ⚠️ No Metrics
+                                  </span>
+                                )}
+                                {/* Length Hint */}
                                 {bullet.length > 150 && (
                                   <span className={clsx("text-[9px] font-bold uppercase tracking-tight", bullet.length > 200 ? "text-amber-500" : "text-gray-400")}>
                                     {bullet.length > 200 ? '⚠️ Too Long for ATS' : `${200 - bullet.length} chars left`}

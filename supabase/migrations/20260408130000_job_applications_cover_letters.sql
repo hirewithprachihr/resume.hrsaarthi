@@ -1,83 +1,61 @@
--- Migration: Create job_applications and cover_letters tables
--- Description: Add tables for job tracking and cover letter management with RLS policies
+-- Migration: Extend job_applications and cover_letters tables
+-- This migration adds EXTRA columns missing from the 20260408120000 version
+-- Uses IF NOT EXISTS / DO NOTHING everywhere to be safe and idempotent
 
--- ============================================================================
--- Table: job_applications
--- ============================================================================
+-- Extra columns on job_applications not in 120000 version
+ALTER TABLE public.job_applications ADD COLUMN IF NOT EXISTS role        TEXT NOT NULL DEFAULT '';
+ALTER TABLE public.job_applications ADD COLUMN IF NOT EXISTS applied_date DATE;
+ALTER TABLE public.job_applications ADD COLUMN IF NOT EXISTS job_url     TEXT;
 
-CREATE TABLE job_applications (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-  company text NOT NULL,
-  role text NOT NULL,
-  status text DEFAULT 'applied' CHECK (status IN ('applied', 'screening', 'interview', 'offer', 'rejected')),
-  applied_date date,
-  notes text,
-  resume_id uuid,
-  job_url text,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
-);
+-- Extra index on status
+CREATE INDEX IF NOT EXISTS idx_job_applications_status ON public.job_applications(status);
+-- Alias index names
+CREATE INDEX IF NOT EXISTS idx_job_applications_user_id ON public.job_applications(user_id);
 
--- RLS Policies for job_applications
-ALTER TABLE job_applications ENABLE ROW LEVEL SECURITY;
+-- Extra column on cover_letters
+ALTER TABLE public.cover_letters ADD COLUMN IF NOT EXISTS content TEXT NOT NULL DEFAULT '';
 
-CREATE POLICY "Users can view own applications"
-  ON job_applications FOR SELECT
-  USING (auth.uid() = user_id);
+-- Extra index alias
+CREATE INDEX IF NOT EXISTS idx_cover_letters_user_id ON public.cover_letters(user_id);
 
-CREATE POLICY "Users can insert own applications"
-  ON job_applications FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can update own applications"
-  ON job_applications FOR UPDATE
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can delete own applications"
-  ON job_applications FOR DELETE
-  USING (auth.uid() = user_id);
-
--- Indexes for performance
-CREATE INDEX idx_job_applications_user_id ON job_applications(user_id);
-CREATE INDEX idx_job_applications_status ON job_applications(status);
-
--- ============================================================================
--- Table: cover_letters
--- ============================================================================
-
-CREATE TABLE cover_letters (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-  resume_id uuid,
-  title text NOT NULL,
-  company text,
-  job_title text,
-  content text NOT NULL,
-  tone text,
-  template_id text,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
-);
-
--- RLS Policies for cover_letters
-ALTER TABLE cover_letters ENABLE ROW LEVEL SECURITY;
-
+-- Extra cover_letters RLS policies (granular per-operation)
+DROP POLICY IF EXISTS "Users can view own letters" ON public.cover_letters;
 CREATE POLICY "Users can view own letters"
-  ON cover_letters FOR SELECT
+  ON public.cover_letters FOR SELECT
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can insert own letters" ON public.cover_letters;
 CREATE POLICY "Users can insert own letters"
-  ON cover_letters FOR INSERT
+  ON public.cover_letters FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update own letters" ON public.cover_letters;
 CREATE POLICY "Users can update own letters"
-  ON cover_letters FOR UPDATE
+  ON public.cover_letters FOR UPDATE
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete own letters" ON public.cover_letters;
 CREATE POLICY "Users can delete own letters"
-  ON cover_letters FOR DELETE
+  ON public.cover_letters FOR DELETE
   USING (auth.uid() = user_id);
 
--- Index for performance
-CREATE INDEX idx_cover_letters_user_id ON cover_letters(user_id);
+-- Extra job_applications RLS policies
+DROP POLICY IF EXISTS "Users can view own applications" ON public.job_applications;
+CREATE POLICY "Users can view own applications"
+  ON public.job_applications FOR SELECT
+  USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can insert own applications" ON public.job_applications;
+CREATE POLICY "Users can insert own applications"
+  ON public.job_applications FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can update own applications" ON public.job_applications;
+CREATE POLICY "Users can update own applications"
+  ON public.job_applications FOR UPDATE
+  USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can delete own applications" ON public.job_applications;
+CREATE POLICY "Users can delete own applications"
+  ON public.job_applications FOR DELETE
+  USING (auth.uid() = user_id);

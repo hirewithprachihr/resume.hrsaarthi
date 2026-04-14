@@ -4,6 +4,7 @@ import { X, Upload, FileText, Loader, CheckCircle, AlertCircle, Sparkles, Shield
 import { parseResumeWithAI } from '../services/resumeParser'
 import { useResumeStore } from '../store/resumeStore'
 import { useAuthStore } from '../store/authStore'
+import { useEntitlements } from '../utils/entitlements'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 
@@ -17,6 +18,7 @@ export default function UploadResumeModal({ onClose }) {
   const fileRef = useRef(null)
   const { fillFromParsed, markAiAssistUsed } = useResumeStore()
   const { plan, testMode } = useAuthStore()
+  const { isPro } = useEntitlements()
 
   const handleFile = (f) => {
     if (!f) return
@@ -45,8 +47,8 @@ export default function UploadResumeModal({ onClose }) {
       return
     }
 
-    // Pro gate — free users cannot use AI parse
-    if (plan !== 'pro' && !testMode) {
+    // Pro gate — respects plan, testMode, AND active launch trial
+    if (!isPro) {
       toast.error('AI Resume Parse is a Pro feature. Upgrade to access it.')
       return
     }

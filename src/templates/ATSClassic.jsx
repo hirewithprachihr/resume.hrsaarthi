@@ -107,12 +107,12 @@ const ATSClassic = React.memo(function ATSClassic({ data, settings }) {
           {/* Name */}
           <div style={{
             fontFamily   : TYPE.SERIF,
-            fontSize     : `${(TYPE.SIZE.NAME * 1.333).toFixed(0)}px`,
+            fontSize     : `${(TYPE.SIZE.NAME * 1.5).toFixed(0)}px`,
             fontWeight   : TYPE.weight.bold,
             letterSpacing: TYPE.tracking.tight,
             color        : '#0f172a',
-            lineHeight   : 1.1,
-            marginBottom : '5px',
+            lineHeight   : 1.05,
+            marginBottom : '8px',
             overflowWrap : 'break-word',
             wordBreak    : 'break-word',
           }}>
@@ -174,14 +174,19 @@ const ATSClassic = React.memo(function ATSClassic({ data, settings }) {
         {personal.summary?.trim() && (
           <div className="resume-entry" style={{ marginBottom: `${TYPE.SPACE.AFTER_SECTION}px` }}>
             <SectionHead accent={accent}>Professional Summary</SectionHead>
-            <p style={{
+            <div style={{
               ...pt(TYPE.SIZE.BODY, TYPE.leading.relaxed),
-              color     : '#334155',
-              margin    : 0,
-              fontFamily: TYPE.SANS,
+              color      : '#334155',
+              margin     : 0,
+              fontFamily : TYPE.SANS,
+              borderLeft : `3px solid ${accent}`,
+              paddingLeft: '12px',
+              background : `${accent}05`,
+              padding    : '10px 12px',
+              borderRadius: '0 4px 4px 0'
             }}>
               {personal.summary}
-            </p>
+            </div>
             <span className="resume-entry-end" />
           </div>
         )}

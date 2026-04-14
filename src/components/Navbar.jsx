@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   FileText, Zap, LayoutTemplate, User, ChevronDown,
-  Menu, X, Star, LogOut, Sparkles, BarChart3, Brain, Shield
+  Menu, X, Star, LogOut, Sparkles, BarChart3, Brain, Shield, Target
 } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { clsx } from 'clsx'
@@ -113,6 +113,7 @@ export default function Navbar() {
               <NavLinkBadge to="/cover-letter"   icon={<FileText size={13}/>}    dark={isDark} badge="New" badgeColor="#0EC8A0">Cover Letter</NavLinkBadge>
               <NavLinkBadge to="/interview-prep" icon={<Brain size={13} />}      dark={isDark} badge="New" badgeColor="#8B5CF6">Interview</NavLinkBadge>
               <NavLink to="/ats-score"     icon={<Zap size={13} />}            dark={isDark}>Readiness</NavLink>
+              <NavLinkBadge to="/tracker" icon={<Target size={13} />} dark={isDark} badge="New" badgeColor="#0E9F6E">Tracker</NavLinkBadge>
               {user && <NavLink to="/dashboard" icon={<BarChart3 size={13} />} dark={isDark}>Dashboard</NavLink>}
             </nav>
 
@@ -242,6 +243,7 @@ export default function Navbar() {
                 <MobLink to="/cover-letter">  <FileText size={14} />       Cover Letter</MobLink>
                 <MobLink to="/interview-prep"><Brain size={14} />           Interview Prep</MobLink>
                 <MobLink to="/ats-score">     <Zap size={14} />            Readiness</MobLink>
+                <MobLink to="/tracker">        <Target size={14} />         Job Tracker</MobLink>
                 {user && <MobLink to="/dashboard"><BarChart3 size={14} /> Dashboard</MobLink>}
                 {!isPro && <MobLink to="/upgrade"><Star size={14} /> Upgrade to Elite</MobLink>}
                 <div className="pt-2 mt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>

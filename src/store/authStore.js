@@ -151,6 +151,33 @@ export const useAuthStore = create(
         }
       },
 
+      // ── Claim Trial ──────────────────────────────────────────
+      claimTrial: async () => {
+        const { user } = get()
+        if (!user) return false
+        set({ isLoading: true })
+        try {
+          const expiry = new Date()
+          expiry.setDate(expiry.getDate() + 30)
+          const isoExpiry = expiry.toISOString()
+          
+          await supabase.from('profiles').update({
+            plan: 'pro',
+            plan_expires_at: isoExpiry
+          }).eq('id', user.id)
+
+          set({ plan: 'pro', planExpiry: isoExpiry })
+          toast.success('30 Days Elite Pro Trial Activated! 🎉')
+          return true
+        } catch (err) {
+          console.error('Trial claim failed:', err)
+          toast.error('Failed to activate trial. Please try again.')
+          return false
+        } finally {
+          set({ isLoading: false })
+        }
+      },
+
       // Legacy sync version (used in UpgradePage handler before async)
       upgradeToproSync: () => set({ plan: 'pro' }),
 

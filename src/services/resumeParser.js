@@ -53,7 +53,6 @@ export async function parseResumeWithAI(file) {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${jwt}`,
-        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
       },
       signal: controller.signal,
       body: JSON.stringify({

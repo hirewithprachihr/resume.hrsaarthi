@@ -277,7 +277,15 @@ export default function PersonalInfoForm() {
           name="personal-summary"
           className="input-field resize-none"
           rows={4}
-          placeholder="Results-driven Software Engineer with 5+ years of experience building scalable web applications. Led teams of 8+ engineers, improved system performance by 40%, and delivered 12 production features. Passionate about clean code and impactful products."
+          placeholder={
+            personal.jobTitle?.toLowerCase().includes('sales') 
+              ? "Results-driven Sales Executive driving 35% YoY growth. Expert in B2B enterprise sales and CRM pipeline management..."
+              : personal.jobTitle?.toLowerCase().includes('hr')
+              ? "Passionate HR professional with 5+ years experience in talent acquisition and employee engagement. Reduced attrition by 15%..."
+              : personal.jobTitle?.toLowerCase().includes('marketing')
+              ? "Data-driven Marketing Manager specializing in performance marketing and SEO. Managed ₹1Cr+ ad budgets delivering 4x ROAS..."
+              : "Results-driven professional with 5+ years of experience building scalable solutions. Proven track record of delivering measurable business impact..."
+          }
           value={personal.summary || ''}
           onChange={e => updatePersonal({ summary: e.target.value })}
         />

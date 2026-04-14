@@ -21,6 +21,7 @@ const AuthCallback       = lazy(() => import('./pages/AuthCallback'))
 const SharePage          = lazy(() => import('./pages/SharePage'))
 const PrivacyPolicyPage  = lazy(() => import('./pages/PrivacyPolicyPage'))
 const TermsOfServicePage = lazy(() => import('./pages/TermsOfServicePage'))
+const JobTrackerPage     = lazy(() => import('./pages/JobTrackerPage'))
 
 // ── Admin (lazy-loaded as one chunk) ─────────────────────────────
 const AdminGuard          = lazy(() => import('./pages/admin/AdminGuard'))
@@ -73,6 +74,7 @@ function AppContent() {
         <Route path="/cover-letter"    element={<Layout pathname={location.pathname}><CoverLetterPage /></Layout>} />
         <Route path="/interview-prep"  element={<Layout pathname={location.pathname}><InterviewPrepPage /></Layout>} />
         <Route path="/share/:id"  element={<SharePage />} />
+        <Route path="/tracker"     element={<Layout pathname={location.pathname}><JobTrackerPage /></Layout>} />
 
         {/* ── Auth Callback (email confirmation deep-link) ───── */}
         <Route path="/auth/callback" element={<AuthCallback />} />

@@ -27,6 +27,7 @@ import InlineEditTitle from '../components/InlineEditTitle'
 import ExportMenu from '../components/ExportMenu'
 import AuthModal from '../components/AuthModal'
 import NextBestFixes from '../components/NextBestFixes'
+import RejectionAnalyzerPanel from '../components/RejectionAnalyzerPanel'
 import ResumeVersionPanel from '../components/ResumeVersionPanel'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
@@ -112,7 +113,7 @@ function NavItem({ sec, active, completeness, onClick }) {
         <Icon size={16} style={{ color: active ? sec.color : '#9ca3af' }} />
       </div>
       <span className={clsx('text-[7px] font-black uppercase tracking-wide leading-none text-center w-full', active ? 'text-gray-800' : 'text-gray-400')}>
-        {sec.label.split(' ')[0].slice(0, 5)}
+        {sec.label.split(' ')[0]}
       </span>
 
       {/* Completion dot */}
@@ -746,14 +747,14 @@ export default function BuilderPage() {
         </div>
 
         {/* ── Sidebar body ── */}
-        <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
 
           {/* ════ FORM TAB ════ */}
           {activeTab === 'form' && (
             <div className="flex h-full">
 
               {/* Section nav column */}
-              <div className="w-[68px] flex-shrink-0 bg-gray-50/60 border-r border-gray-100/80 py-3 flex flex-col gap-1 items-center">
+              <div className="w-[84px] flex-shrink-0 bg-gray-50/60 border-r border-gray-100/80 py-3 flex flex-col gap-1 items-center">
                 {FORM_SECTIONS.map(sec => (
                   <NavItem
                     key={sec.id}
@@ -847,17 +848,6 @@ export default function BuilderPage() {
 
                 {/* Form */}
                 <div className="flex-1 p-4 overflow-y-auto">
-                  <div className="mb-3">
-                    <NextBestFixes
-                      completeness={completeness}
-                      atsScore={atsScore}
-                      onJumpToSection={(sec) => {
-                        setActiveSection(sec)
-                        const el = document.getElementById(`resume-sec-${sec}`)
-                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                      }}
-                    />
-                  </div>
                   {ActiveForm && <ActiveForm />}
                 </div>
               </div>
@@ -866,7 +856,16 @@ export default function BuilderPage() {
 
           {/* ════ ATS SCORE TAB ════ */}
           {activeTab === 'ats' && (
-            <div className="flex flex-col">
+            <div className="flex flex-col h-full overflow-y-auto">
+              {/* Rejection Analyzer — shown first */}
+              <div className="mx-4 mt-4 mb-2">
+                <RejectionAnalyzerPanel
+                  resumeData={resumeData}
+                  compact
+                  onJumpTo={(sec) => { setActiveSection(sec); setActiveTab('form') }}
+                />
+              </div>
+
               {/* Score summary card */}
               {atsScore && (
                 <div className="m-4 p-4 bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl text-white">
@@ -982,7 +981,7 @@ export default function BuilderPage() {
 
           {/* ════ DESIGN TAB ════ */}
           {activeTab === 'design' && (
-            <div className="p-4 space-y-6">
+            <div className="p-4 space-y-6 h-full overflow-y-auto">
 
               {/* Template selector */}
               <div>

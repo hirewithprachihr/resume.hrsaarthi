@@ -91,8 +91,9 @@ export default function UpgradePage() {
   const [showAuth, setShowAuth]       = useState(false)
   const [paySuccess, setPaySuccess]   = useState(false)
   const [selectedPlan, setSelectedPlan] = useState(PLANS[1]) // Default to Annual
+  const [claiming, setClaiming]         = useState(false)
 
-  const { user, plan, upgradeToPro } = useAuthStore()
+  const { user, plan, planExpiry, upgradeToPro, claimTrial } = useAuthStore()
   const { resumeData }               = useResumeStore()
   const { isPro, launchOfferActive } = useEntitlements()
 
@@ -141,6 +142,16 @@ export default function UpgradePage() {
         </motion.div>
       </div>
     )
+  }
+
+  const handleClaimTrial = async () => {
+    if (!user) {
+      setShowAuth(true)
+      return
+    }
+    setClaiming(true)
+    await claimTrial()
+    setClaiming(false)
   }
 
   const handleUpgrade = async () => {
@@ -371,12 +382,22 @@ export default function UpgradePage() {
               </li>
             ))}
           </ul>
-          <Link
-            to="/builder"
-            className="w-full flex items-center justify-center gap-2 py-3 border-2 border-gray-200 rounded-2xl font-bold text-gray-600 hover:border-gray-400 text-sm transition-colors"
-          >
-            Continue Free
-          </Link>
+          {launchOfferActive && !planExpiry && plan !== 'pro' ? (
+            <button
+              onClick={handleClaimTrial}
+              disabled={claiming}
+              className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-amber-400 to-orange-400 text-gray-900 rounded-2xl font-black shadow-lg hover:shadow-xl transition-all uppercase tracking-wider text-sm disabled:opacity-50"
+            >
+              {claiming ? 'Activating...' : 'Claim 30 Days Free Trial'}
+            </button>
+          ) : (
+            <Link
+              to="/builder"
+              className="w-full flex items-center justify-center gap-2 py-3 border-2 border-gray-200 rounded-2xl font-bold text-gray-600 hover:border-gray-400 text-sm transition-colors"
+            >
+              Continue Free
+            </Link>
+          )}
         </motion.div>
 
         {/* Pro card */}

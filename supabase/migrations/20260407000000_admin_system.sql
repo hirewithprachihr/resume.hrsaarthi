@@ -1,5 +1,5 @@
 -- Admin tables for HR Saarthi platform management
--- Run this in Supabase SQL Editor: https://supabase.com/dashboard/project/mtfxwyezotzrzzsyhoay/sql
+-- Idempotent version — safe to run multiple times
 
 -- ── Admin roles table ─────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.admin_roles (
@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS public.discount_codes (
   discount_pct INTEGER NOT NULL DEFAULT 10 CHECK (discount_pct >= 0 AND discount_pct <= 100),
   valid_from   TIMESTAMPTZ DEFAULT now(),
   valid_until  TIMESTAMPTZ,
-  max_uses     INTEGER DEFAULT NULL,  -- NULL = unlimited
+  max_uses     INTEGER DEFAULT NULL,
   uses_count   INTEGER NOT NULL DEFAULT 0,
   is_active    BOOLEAN NOT NULL DEFAULT true,
   created_at   TIMESTAMPTZ DEFAULT now(),
@@ -56,20 +56,23 @@ ALTER TABLE public.admin_roles      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.discount_codes   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.platform_settings ENABLE ROW LEVEL SECURITY;
 
--- Only admins can read admin_roles
+-- Only admins can read admin_roles (idempotent)
+DROP POLICY IF EXISTS "Admins read admin_roles" ON public.admin_roles;
 CREATE POLICY "Admins read admin_roles" ON public.admin_roles
   FOR SELECT USING (auth.uid() IN (SELECT user_id FROM public.admin_roles));
 
 -- Only admins manage discounts
+DROP POLICY IF EXISTS "Admins manage discounts" ON public.discount_codes;
 CREATE POLICY "Admins manage discounts" ON public.discount_codes
   FOR ALL USING (auth.uid() IN (SELECT user_id FROM public.admin_roles));
 
 -- Only admins manage settings
+DROP POLICY IF EXISTS "Admins manage settings" ON public.platform_settings;
 CREATE POLICY "Admins manage settings" ON public.platform_settings
   FOR ALL USING (auth.uid() IN (SELECT user_id FROM public.admin_roles));
 
 -- ── Admin view of all users (via profiles) ────────────────────
--- Allow admins to read all profiles (bypass normal RLS)
+DROP POLICY IF EXISTS "Admins read all profiles" ON public.profiles;
 CREATE POLICY "Admins read all profiles" ON public.profiles
   FOR SELECT USING (
     auth.uid() IN (SELECT user_id FROM public.admin_roles)
@@ -77,6 +80,7 @@ CREATE POLICY "Admins read all profiles" ON public.profiles
   );
 
 -- ── Admin view of all resumes ─────────────────────────────────
+DROP POLICY IF EXISTS "Admins read all resumes" ON public.resumes;
 CREATE POLICY "Admins read all resumes" ON public.resumes
   FOR SELECT USING (
     auth.uid() IN (SELECT user_id FROM public.admin_roles)
