@@ -18,25 +18,36 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
   },
 })
 
-// ── Auth ─────────────────────────────────────────────────────
 export const signUp = async (email, password, name) => {
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: { data: { full_name: name } },
-  })
+  const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Auth system hung. Please refresh the page and try again.')), 7000))
+  const { data, error } = await Promise.race([
+    supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: name } },
+    }),
+    timeoutPromise
+  ])
   if (error) throw error
   return data
 }
 
 export const signIn = async (email, password) => {
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+  const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Auth system hung. Please refresh the page and try again.')), 7000))
+  const { data, error } = await Promise.race([
+    supabase.auth.signInWithPassword({ email, password }),
+    timeoutPromise
+  ])
   if (error) throw error
   return data
 }
 
 export const signOut = async () => {
-  const { error } = await supabase.auth.signOut()
+  const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 3000))
+  const { error } = await Promise.race([
+    supabase.auth.signOut(),
+    timeoutPromise.then(() => ({ error: null })) // Force successful resolution on timeout so local cleanup happens anyway
+  ])
   if (error) throw error
 }
 

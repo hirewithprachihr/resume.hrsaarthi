@@ -123,44 +123,27 @@ function readAsText(file) {
 }
 
 /**
- * Lightweight PDF text extraction — reads raw binary, finds BT/ET blocks.
- * Works for text-layer PDFs. Scanned PDFs return empty → error shown to user.
+ * Robust PDF text extraction using pdfjs-dist.
  */
+import * as pdfjsLib from 'pdfjs-dist'
+
+// Configure worker. Note: vite handles standard URL imports for workers.
+// But pdfjs-dist ships with a worker we can point to.
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
+
 async function extractPdfText(file) {
-  const buffer = await file.arrayBuffer()
-
-  // Use TextDecoder with latin1 — O(n) instead of O(n²) char-by-char concat
-  const raw = new TextDecoder('latin1').decode(buffer)
-
-  const btEtBlocks = raw.match(/BT[\s\S]*?ET/g) || []
-  const textPieces = []
-  const tjPattern  = /\(([^)]*)\)\s*Tj/g
-  const TjPattern  = /\[([^\]]*)\]\s*TJ/g
-
-  for (const block of btEtBlocks) {
-    let m
-    while ((m = tjPattern.exec(block)) !== null) textPieces.push(decodePdfString(m[1]))
-    while ((m = TjPattern.exec(block)) !== null) {
-      const arr = m[1].match(/\(([^)]*)\)/g) || []
-      arr.forEach(s => textPieces.push(decodePdfString(s.slice(1, -1))))
-    }
+  const arrayBuffer = await file.arrayBuffer()
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+  
+  let fullText = ''
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i)
+    const textContent = await page.getTextContent()
+    const textItems = textContent.items.map(item => item.str)
+    fullText += textItems.join(' ') + '\n'
   }
-
-  const extracted = textPieces.join(' ').replace(/\s+/g, ' ').trim()
-  return extracted.length < 100 ? extractPdfRawFallback(raw) : extracted
-}
-
-function decodePdfString(s) {
-  return s
-    .replace(/\\n/g, '\n').replace(/\\r/g, ' ').replace(/\\t/g, ' ')
-    .replace(/\\\\/g, '\\')
-    .replace(/\\([0-7]{3})/g, (_, oct) => String.fromCharCode(parseInt(oct, 8)))
-    .replace(/\\(.)/g, '$1')
-}
-
-function extractPdfRawFallback(raw) {
-  const words = raw.match(/[A-Za-z][A-Za-z0-9.@,+\-/()₹%&':#]{2,}/g) || []
-  return words.join(' ').slice(0, 14000)
+  
+  return fullText
 }
 
 /**
