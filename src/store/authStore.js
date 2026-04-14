@@ -41,7 +41,14 @@ export const useAuthStore = create(
               if (session?.user) {
                 await _handleSession(session.user, session)
               } else {
-                set({ user: null, accessToken: null, plan: 'free', isAuthLoading: false })
+                // IMPORTANT: If `getSession` locked and returned null, do NOT wipe the user 
+                // if they are already hydrated by persist or onAuthStateChange.
+                // Just clear the loading flag to unblock the router.
+                if (!get().user) {
+                  set({ user: null, accessToken: null, plan: 'free', isAuthLoading: false })
+                } else {
+                  set({ isAuthLoading: false })
+                }
               }
             })
             .catch(() => set({ isAuthLoading: false }))
@@ -228,6 +235,7 @@ export const useAuthStore = create(
       name      : 'hwp-auth-store',
       partialize: (state) => ({
         user          : state.user,
+        accessToken   : state.accessToken,
         plan          : state.plan,
         planExpiry    : state.planExpiry,
         subscriptionId: state.subscriptionId,

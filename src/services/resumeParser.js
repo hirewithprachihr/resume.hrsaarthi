@@ -44,9 +44,16 @@ export async function parseResumeWithAI(file) {
   console.time('[AI Parse] Network Request')
 
   try {
-    // Bypassing supabase.functions.invoke to avoid 'Lock not released' hangs
-    // Get session from store state (already synchronized and lock-free)
-    const jwt = useAuthStore.getState().accessToken || import.meta.env.VITE_SUPABASE_ANON_KEY
+    // Bypassing supabase.functions.invoke to avoid 'Lock not released' hangs.
+    // We attempt to get a fresh JWT from Supabase to handle expired tokens safely.
+    // If the gotrue lock is stuck, we timeout in 2.5s and fallback to Zustand store.
+    const freshSessionPromise = new Promise(resolve => {
+      supabase.auth.getSession().then(({ data }) => resolve(data?.session?.access_token)).catch(() => resolve(null))
+    })
+    const fallbackPromise = new Promise(resolve => setTimeout(() => resolve(null), 2500))
+    const freshJwt = await Promise.race([freshSessionPromise, fallbackPromise])
+
+    const jwt = freshJwt || useAuthStore.getState().accessToken || import.meta.env.VITE_SUPABASE_ANON_KEY
 
     const res = await fetch(`${SUPABASE_URL}/functions/v1/parse-resume`, {
       method: 'POST',
