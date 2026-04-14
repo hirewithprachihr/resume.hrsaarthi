@@ -9,6 +9,7 @@ import {
 
 // Module-level: NOT stored in Zustand to avoid serialization issues
 let _authSubscription = null
+let _sessionPromise = null
 
 export const useAuthStore = create(
   persist(
@@ -64,11 +65,11 @@ export const useAuthStore = create(
 
       // Internal: fetch profile & set user + plan
       _handleSession: async (authUser, session = null) => {
-        // Prevent concurrent session handling
-        if (get()._isHandlingSession) return
-        set({ _isHandlingSession: true })
-
-        try {
+        // Prevent concurrent execution but await the resolution
+        if (_sessionPromise) return _sessionPromise
+        
+        const task = async () => {
+          try {
           const profile = await getProfile(authUser.id)
           const planExpiry = profile.plan_expires_at ? new Date(profile.plan_expires_at) : null
           let activePlan = planExpiry && planExpiry < new Date() ? 'free' : (profile.plan || 'free')
@@ -98,7 +99,29 @@ export const useAuthStore = create(
             plan: 'free',
           })
         } finally {
-          set({ _isHandlingSession: false, isAuthLoading: false })
+          set({ isAuthLoading: false })
+        }
+        }
+        
+        _sessionPromise = task()
+        try {
+          await _sessionPromise
+        } finally {
+          _sessionPromise = null
+        }
+      },
+
+      // ── Register ───────────────────────────────────────────
+      register: async (email, password, name) => {
+        set({ isLoading: true })
+        try {
+          // signUp with options.data.full_name handles profile populating implicitly via Supabase triggers or gets pulled later
+          await signUp(email, password, name)
+        } catch (err) {
+          toast.error(err.message || 'Signup failed.')
+          throw err
+        } finally {
+          set({ isLoading: false })
         }
       },
 

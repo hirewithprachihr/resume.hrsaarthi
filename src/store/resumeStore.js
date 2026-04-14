@@ -604,17 +604,21 @@ export const useResumeStore = create(
       },
 
 
-      fillFromParsed: (parsed) => set(s => ({
+      fillFromParsed: (rawParsed) => set(s => {
+        // Robust unwrapping: GPT sometimes nests the response even when told not to.
+        const parsed = rawParsed.resume || rawParsed.resumeData || rawParsed.data || rawParsed.parsed || rawParsed
+        
+        return {
         resumeData: {
           personal: {
             ...DEFAULT_RESUME.personal,
-            fullName: parsed.name      || '',
-            jobTitle: parsed.jobTitle  || '',
+            fullName: parsed.name || parsed.fullName || '',
+            jobTitle: parsed.jobTitle || parsed.title || '',
             email   : parsed.email     || '',
             phone   : parsed.phone     || '',
             location: parsed.location  || '',
             linkedin: parsed.linkedin  || '',
-            website : parsed.website   || '',
+            website : parsed.website || parsed.url || '',
             summary : parsed.summary   || '',
           },
           experience: (parsed.experience || []).map(e => ({
@@ -661,7 +665,7 @@ export const useResumeStore = create(
           customSections: s.resumeData.customSections,
         },
         isDirty: true,
-      })),
+      }}),
     }),
     {
       name   : 'hwp-resume-store-v2',
