@@ -11,7 +11,7 @@ export async function isAdmin(userId) {
     .from('admin_roles')
     .select('role')
     .eq('user_id', userId)
-    .single()
+    .maybeSingle()
   return !!data
 }
 
