@@ -26,15 +26,24 @@ export default function LoginPage() {
     try {
       if (mode === 'signup') {
         await register(email, password, name)
-        toast.success('Account created! Check your email to confirm.')
-        setMode('login')
+        // After register, check if a session was auto-created (email confirm disabled)
+        const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }))
+        if (session?.user) {
+          toast.success('🎉 Account created! Welcome aboard!')
+          setTimeout(() => {
+            navigate(returnTo, { replace: true })
+            loadCloudResumes(true).catch(() => {})
+          }, 100)
+        } else {
+          // Email confirmation required — switch to sign-in mode with guidance
+          toast.success('Account created! Please check your email to confirm, then sign in.')
+          setMode('login')
+        }
       } else {
         await login(email, password)
         toast.success('Welcome back!')
-        // Small delay to let the store stabilize before navigation
         setTimeout(() => {
           navigate(returnTo, { replace: true })
-          // Load resumes in background
           loadCloudResumes(true).catch(() => {})
         }, 100)
       }

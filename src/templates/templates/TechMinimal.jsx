@@ -1,4 +1,4 @@
-import React from 'react'
+﻿import React from 'react'
 import { Mail, Phone, MapPin, Linkedin, Globe } from 'lucide-react'
 import { TYPE, pt } from '../typography'
 
@@ -94,9 +94,9 @@ const TechMinimal = React.memo(function TechMinimal({ data, settings }) {
                   </span>
                 </div>
                 {(exp.bullets || []).filter(b => b?.trim()).length > 0 && (
-                  <ul style={{ paddingLeft: `${TYPE.SPACE.BULLET_INDENT}px`, marginTop: '4px', listStyleType: 'disc' }}>
+                  <ul style={{ paddingLeft: `${TYPE.SPACE.BULLET_INDENT}px`, marginTop: '4px', listStyle: 'none' }}>
                     {exp.bullets.filter(b => b?.trim()).map((b, i) => (
-                      <li key={i} className="resume-bullet-text" style={{ ...pt(TYPE.SIZE.BULLET, TYPE.leading.relaxed), color: '#94a3b8', marginBottom: '3px' }}>{b}</li>
+                      <li key={i} className="resume-bullet" style={{ ...pt(TYPE.SIZE.BULLET, TYPE.leading.relaxed), color: '#94a3b8', marginBottom: '3px' }}>{b}</li>
                     ))}
                   </ul>
                 )}

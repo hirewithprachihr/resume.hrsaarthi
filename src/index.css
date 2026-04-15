@@ -110,24 +110,31 @@
 
 /* ═══════════════════════════════════════════════════
    RESUME A4 CANVAS — Core container
+   Exact A4: 794px × 1123px @ 96dpi
    ═══════════════════════════════════════════════════ */
 .resume-a4 {
   width: 794px;
   min-height: 1123px;
   background: white;
-  font-size: 11pt;
-  line-height: 1.45;
+  font-size: 10pt;         /* 13.3px — optimal for print readability */
+  line-height: 1.5;
   color: #1a1a1a;
   position: relative;
-  /* Critical: force GPU layer for smooth scaling */
-  transform: translateZ(0);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Critical: force GPU layer for smooth scaling */
+  transform: translateZ(0);
+  /* Ensure colors print on all browsers */
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  color-adjust: exact;
 }
 
 /* Off-screen PDF capture root — must not clip multi-page content */
 .resume-export-root {
   overflow: visible !important;
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
 }
 
 .resume-export-root .resume-a4 {
@@ -135,12 +142,21 @@
   min-height: min-content;
 }
 
-/* Fills the outer `.resume-a4` preview frame (used by Modern Split, Playful Business, Sleek Financial) */
+/* Fills the outer `.resume-a4` preview frame */
 .resume-canvas {
   width: 100%;
   box-sizing: border-box;
   min-height: 1123px;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
+
+/* ═══════════════════════════════════════════════════
+   PAGE BREAK SYSTEM
+   Applied to template elements for both:
+   1. CSS @media print (browser native)
+   2. JS smart page break detection in pdfExporter
+   ═══════════════════════════════════════════════════ */
 
 /* ═══════════════════════════════════════════════════
    PAGE BREAK SYSTEM
@@ -154,12 +170,11 @@
   break-inside: avoid !important;
   page-break-inside: avoid !important;
   -webkit-column-break-inside: avoid !important;
-  /* Must be display:block — flex/grid break page-break-inside in Safari */
   display: block;
   position: relative;
 }
 
-/* Section heading — NEVER be the last thing on a page (stays with first entry below) */
+/* Section heading — NEVER be the last thing on a page */
 .resume-section-head {
   break-after: avoid !important;
   page-break-after: avoid !important;
@@ -177,29 +192,42 @@
   page-break-inside: avoid !important;
 }
 
-/* Widow/orphan protection for bullet text */
-
-/* ── Two-column template sidebar fix ── */
-/* Sidebars with fixed height can clip content on page 2.
-   Force height:auto in all template rendering contexts. */
-.resume-col-left,
-.resume-sidebar,
-[class*="sidebar"] {
-  height: auto !important;
-  min-height: 0 !important;
-  overflow: visible !important;
+/* Custom bullet that renders across ALL engines (html2canvas, wkhtmltopdf, Chromium print) */
+.resume-bullet {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin-bottom: 4px;
 }
 
-/* Marker for safe column break points (right column only) */
+.resume-bullet::before {
+  content: '▪';
+  flex-shrink: 0;
+  font-size: 7px;
+  line-height: 1.8;
+  color: currentColor;
+  opacity: 0.6;
+}
+
+/* Sidebar fix — height must auto-expand to fill content */
+.resume-col-left,
+.resume-sidebar,
+[data-is-sidebar="true"] {
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+  color-adjust: exact !important;
+}
+
 .resume-col-right .resume-entry {
   break-inside: avoid !important;
 }
+
 .resume-bullet-text {
-  orphans: 2;
-  widows: 2;
+  orphans: 3;
+  widows: 3;
 }
 
-/* Marks the safe bottom of an entry (scanned by smart break detector) */
+/* Safe bottom of an entry */
 .resume-entry-end {
   display: block;
   height: 0;
@@ -302,31 +330,83 @@
 }
 
 /* ═══════════════════════════════════════════════════
-   PRINT MEDIA — Full native print rules for printResume()
+   PRINT MEDIA — Premium A4 print rules
+   Used by: react-to-print, browser Print dialog, printResume()
    ═══════════════════════════════════════════════════ */
 @media print {
-  body { margin: 0; padding: 0; }
-  .no-print { display: none !important; }
+  *, *::before, *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
 
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    width: 210mm !important;
+    min-height: 297mm !important;
+  }
+
+  /* Hide all UI chrome */
+  .no-print,
+  .resume-page-break-visual,
+  .elite-force-break::before,
+  .page-break-guide,
+  .page-break-label,
+  nav, header:not(.resume-header), footer:not(.resume-footer),
+  button, [role="button"],
+  .Toaster, .toaster {
+    display: none !important;
+  }
+
+  /* The A4 container — fills exactly one portrait A4 page */
   .resume-a4 {
     width: 210mm !important;
     min-height: 297mm !important;
     margin: 0 !important;
-    padding: 18mm 15mm !important;  /* Industry standard: 15mm sides, 18mm top/bottom */
+    padding: 0 !important;
     box-shadow: none !important;
     border: none !important;
     transform: none !important;
+    border-radius: 0 !important;
+    /* Critical: preserve ALL background colors and images */
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  /* Sidebar color blocks MUST print with full color */
+  [data-is-sidebar="true"],
+  .resume-sidebar,
+  [class*="sidebar"],
+  [style*="background"] {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  .resume-page-break-visual { display: none !important; }
-  .elite-force-break::before { display: none !important; }
-
-  @page {
-    size: A4 portrait;
-    margin: 0;
+  /* Smart page breaks */
+  .resume-entry {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
+
+  .resume-section-head {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  .resume-section {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+}
+
+/* @page rule — must be at root level, not inside @media print */
+@page {
+  size: A4 portrait;
+  /* Zero margin: templates control their own padding */
+  margin: 0;
 }
 
 /* ═══════════════════════════════════════════════════

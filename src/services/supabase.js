@@ -1,5 +1,5 @@
 /**
- * Supabase client & helpers — v2.0 (real auth + cloud sync)
+ * Supabase client & helpers — v2.1 (hardened auth + retry logic)
  */
 import { createClient } from '@supabase/supabase-js'
 
@@ -12,56 +12,126 @@ if (!supabaseUrl || !supabaseKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
-    autoRefreshToken: true,
-    persistSession  : true,
+    autoRefreshToken : true,
+    persistSession   : true,
     detectSessionInUrl: true,
+    storageKey       : 'hwp-auth',   // Consistent key for all storage ops
   },
 })
 
+// ── Helper: delay ────────────────────────────────────────────
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms))
+
+// ── Helper: race with timeout ────────────────────────────────
+function withTimeout(promise, ms, rejectMessage) {
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error(rejectMessage)), ms)
+  )
+  return Promise.race([promise, timeoutPromise])
+}
+
+// ── Auth ─────────────────────────────────────────────────────
+
+/**
+ * Sign up with email + password.
+ * 15s timeout — network conditions in India can be slow.
+ */
 export const signUp = async (email, password, name) => {
-  const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Auth system hung. Please refresh the page and try again.')), 7000))
-  const { data, error } = await Promise.race([
+  const { data, error } = await withTimeout(
     supabase.auth.signUp({
       email,
       password,
       options: { data: { full_name: name } },
     }),
-    timeoutPromise
-  ])
+    15000,
+    'Signup timed out. Please check your connection and try again.'
+  )
   if (error) throw error
   return data
 }
 
+/**
+ * Sign in with email + password.
+ * FIXED: 15s timeout (was 7s — too aggressive for 3G/slow connections).
+ * Auto-retries once on network error only (not on auth failures).
+ */
 export const signIn = async (email, password) => {
-  const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Auth system hung. Please refresh the page and try again.')), 7000))
-  const { data, error } = await Promise.race([
-    supabase.auth.signInWithPassword({ email, password }),
-    timeoutPromise
-  ])
-  if (error) throw error
-  return data
+  const attemptSignIn = () =>
+    withTimeout(
+      supabase.auth.signInWithPassword({ email, password }),
+      15000,
+      'Login timed out. Please check your connection and try again.'
+    )
+
+  let lastError
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const { data, error } = await attemptSignIn()
+      if (error) {
+        // Auth errors (wrong password, unconfirmed email) — don't retry
+        if (
+          error.message?.includes('Invalid login') ||
+          error.message?.includes('Email not confirmed') ||
+          error.message?.includes('Invalid credentials') ||
+          error.status === 400
+        ) {
+          throw error
+        }
+        // Network/server errors — retry once
+        lastError = error
+        if (attempt < 2) {
+          console.warn(`[Supabase] signIn attempt ${attempt} failed (network), retrying…`)
+          await delay(1500)
+          continue
+        }
+        throw error
+      }
+      return data
+    } catch (err) {
+      lastError = err
+      // Don't retry on auth errors
+      if (
+        err.message?.includes('Invalid login') ||
+        err.message?.includes('Email not confirmed') ||
+        err.message?.includes('Invalid credentials') ||
+        err.message?.includes('timed out')
+      ) {
+        throw err
+      }
+      if (attempt < 2) {
+        console.warn(`[Supabase] signIn attempt ${attempt} exception, retrying…`)
+        await delay(1500)
+      }
+    }
+  }
+  throw lastError
 }
 
 export const signOut = async () => {
   const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 3000))
   const { error } = await Promise.race([
     supabase.auth.signOut(),
-    timeoutPromise.then(() => ({ error: null })) // Force successful resolution on timeout so local cleanup happens anyway
+    timeoutPromise.then(() => ({ error: null })) // Force resolve on timeout so local cleanup always runs
   ])
   if (error) throw error
 }
 
-// ── Auth ─────────────────────────────────────────────────────
+/**
+ * Safe getSession wrapper — prevents lock-induced hangs.
+ * Returns null session (not an error) if Supabase auth lock is stuck.
+ * Timeout is 6s to avoid false-positive fires during React StrictMode
+ * double-invoke (which holds the GoTrue lock briefly on second mount).
+ */
 export const getSession = async () => {
-  // Safe wrapper to prevent lock-induced hangs
-  const timeoutPromise = new Promise((_, reject) => 
-    setTimeout(() => reject(new Error('SESSION_LOCK_TIMEOUT')), 3000)
-  )
   try {
-    return await Promise.race([supabase.auth.getSession(), timeoutPromise])
+    return await withTimeout(
+      supabase.auth.getSession(),
+      6000,
+      'SESSION_LOCK_TIMEOUT'
+    )
   } catch (err) {
     if (err.message === 'SESSION_LOCK_TIMEOUT') {
-      console.warn('[Supabase] getSession locked, returning null to prevent hang.')
+      console.info('[Supabase] getSession took >6s — returning null to unblock UI.')
       return { data: { session: null }, error: null }
     }
     throw err
@@ -73,6 +143,8 @@ export const onAuthStateChange = (cb) => {
     return supabase.auth.onAuthStateChange(cb)
   } catch (err) {
     console.error('[Supabase] onAuthStateChange failed:', err)
+    // Return a no-op subscription to avoid destructuring errors in caller
+    return { data: { subscription: { unsubscribe: () => {} } } }
   }
 }
 
@@ -233,12 +305,12 @@ export const fetchCoverLetters = async (userId) => {
       .select('*')
       .eq('user_id', userId)
       .order('updated_at', { ascending: false })
-    
+
     if (error) {
       console.error('[Supabase] fetchCoverLetters error:', error)
       throw new Error(`Failed to fetch cover letters: ${error.message}`)
     }
-    
+
     return data || []
   } catch (err) {
     if (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError')) {
@@ -252,18 +324,18 @@ export const saveCoverLetter = async (row) => {
   try {
     const ts = new Date().toISOString()
     const payload = { ...row, updated_at: ts }
-    
+
     const { data, error } = await supabase
       .from('cover_letters')
       .upsert(payload, { onConflict: 'id' })
       .select()
       .single()
-    
+
     if (error) {
       console.error('[Supabase] saveCoverLetter error:', error)
       throw new Error(`Failed to save cover letter: ${error.message}`)
     }
-    
+
     return data
   } catch (err) {
     if (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError')) {
@@ -279,7 +351,7 @@ export const deleteCoverLetter = async (id) => {
       .from('cover_letters')
       .delete()
       .eq('id', id)
-    
+
     if (error) {
       console.error('[Supabase] deleteCoverLetter error:', error)
       throw new Error(`Failed to delete cover letter: ${error.message}`)

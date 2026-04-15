@@ -25,8 +25,8 @@ export const TYPE = {
     TITLE    : 11,   // Job title under name — medium weight
     SECTION  : 9.5,  // Section heading (EXPERIENCE, EDUCATION, etc.)
     ENTRY_HDR: 10.5, // Job title, degree title — bold
-    BODY     : 9.5,  // Standard body text
-    BULLET   : 9.5,  // Bullet point text
+    BODY     : 10,   // Standard body text (10pt = 13.3px — optimal print readability)
+    BULLET   : 10,   // Bullet point text
     SMALL    : 8.5,  // Dates, locations, captions, contact info
     MICRO    : 7.5,  // Tags, badges, fine print
   },
@@ -48,7 +48,7 @@ export const TYPE = {
     wide   : '0.05em',
     wider  : '0.08em',
     widest : '0.15em',
-    caps   : '0.2em',  // Small caps / section labels
+    caps   : '0.12em',  // Section labels (tightened from 0.2 for premium print look)
   },
 
   // ── Line Heights ─────────────────────────────────────────
@@ -56,21 +56,21 @@ export const TYPE = {
     tight  : 1.2,
     snug   : 1.35,
     normal : 1.45,
-    relaxed: 1.6,
+    relaxed: 1.55,  // Bullet/body text — more compact for A4 density
     loose  : 1.75,
   },
 
   // ── Spacing Constants (px) ───────────────────────────────
   SPACE: {
-    PAGE_TOP      : 40,  // Padding from top of page to first content
-    PAGE_SIDES    : 32,  // Standard side margin
-    PAGE_SIDES_SM : 28,  // Tighter side margin for two-column layouts
-    SECTION_BOTTOM: 6,   // Space between section head rule and first entry
-    ENTRY_BOTTOM  : 14,  // Space between consecutive experience entries
-    AFTER_SECTION : 20,  // Space after entire section block before next
-    COMPACT_ENTRY : 8,   // Compact entries (certs, skills, languages)
-    BULLET_INDENT : 14,  // Left indent for bullet lists
-    BULLET_SPACING: 3,   // Space between consecutive bullets
+    PAGE_TOP      : 36,  // Padding from top to first content
+    PAGE_SIDES    : 40,  // Side margin — 40px ≈ 10.6mm (ATS-compliant minimum)
+    PAGE_SIDES_SM : 32,  // Tighter side margin for two-column layouts
+    SECTION_BOTTOM: 6,
+    ENTRY_BOTTOM  : 12,  // Between experience entries
+    AFTER_SECTION : 18,
+    COMPACT_ENTRY : 6,
+    BULLET_INDENT : 0,   // 0 = use .resume-bullet flex layout (renders in all engines)
+    BULLET_SPACING: 4,
   },
 }
 

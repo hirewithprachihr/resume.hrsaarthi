@@ -1,4 +1,4 @@
-import React from 'react'
+﻿import React from 'react'
 import { Mail, Phone, MapPin, Linkedin, Globe, Github, Twitter } from 'lucide-react'
 import { TYPE, pt, sectionStyle } from '../typography'
 
@@ -120,9 +120,9 @@ const CorporatePro = React.memo(function CorporatePro({ data, settings }) {
                   </span>
                 </div>
                 {(exp.bullets || []).filter(b => b?.trim()).length > 0 && (
-                  <ul style={{ paddingLeft: `${TYPE.SPACE.BULLET_INDENT}px`, marginTop: '5px', listStyleType: 'disc' }}>
+                  <ul style={{ paddingLeft: `${TYPE.SPACE.BULLET_INDENT}px`, marginTop: '5px', listStyle: 'none' }}>
                     {exp.bullets.filter(b => b?.trim()).map((b, i) => (
-                      <li key={i} className="resume-bullet-text" style={{ ...pt(TYPE.SIZE.BULLET, TYPE.leading.relaxed), color: '#334155', marginBottom: `${TYPE.SPACE.BULLET_SPACING}px` }}>{b}</li>
+                      <li key={i} className="resume-bullet" style={{ ...pt(TYPE.SIZE.BULLET, TYPE.leading.relaxed), color: '#334155', marginBottom: `${TYPE.SPACE.BULLET_SPACING}px` }}>{b}</li>
                     ))}
                   </ul>
                 )}

@@ -6,11 +6,12 @@
  *  - Guest user: clicking "Download PDF" → AuthModal pops up
  *    → on success, download auto-triggers
  */
-import { useState, useRef, useEffect, useCallback } from 'react'
-import { Download, ChevronDown, FileText, Printer, Loader, Lock, Star, LogIn, Share2, Globe, Copy, Check } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback, createRef } from 'react'
+import { Download, ChevronDown, FileText, Printer, Loader, Lock, Star, LogIn, Share2, Globe, Copy, Check, Layers } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { clsx } from 'clsx'
 import { exportToPDF, printResumeWithComponent } from '../utils/pdfExporter'
+import { useReactToPrint } from 'react-to-print'
 import { exportToDocx } from '../utils/docxExporter'
 import { useResumeStore } from '../store/resumeStore'
 import { useAuthStore } from '../store/authStore'
@@ -23,11 +24,13 @@ import { EVENT_NAMES, trackEvent } from '../services/analytics'
 
 export default function ExportMenu({ ResumeComponent }) {
   const [open, setOpen]           = useState(false)
-  const [exporting, setExporting]  = useState(null)  // null | 'pdf' | 'print'
+  const [exporting, setExporting]  = useState(null)  // null | 'pdf' | 'imgpdf' | 'print'
   const [docxLoading, setDocxLoading] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(false)
-  const [pendingAction, setPendingAction] = useState(null) // 'pdf' | 'print'
+  const [pendingAction, setPendingAction] = useState(null) // 'pdf' | 'imgpdf' | 'print'
 
+  // ref for react-to-print (points at a hidden print-ready component)
+  const printComponentRef = useRef(null)
   const ref = useRef(null)
   const {
     resumeData, settings, activeResumeId, savedResumes, togglePublic,
@@ -50,24 +53,44 @@ export default function ExportMenu({ ResumeComponent }) {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // ── PDF export (the actual work) ──────────────────────────────
-  const doPDF = useCallback(async () => {
+  // ── PRIMARY: Native print PDF (browser Chromium engine = premium quality) ──
+  // Uses react-to-print which triggers window.print() on a hidden, perfectly
+  // styled A4 component. This is the same approach as Zety/Novoresume.
+  const doPDF = useCallback(() => {
     setOpen(false)
     setExporting('pdf')
+    // react-to-print is async internally but triggers synchronously
+    // We use printResumeWithComponent which opens a clean print window
+    printResumeWithComponent(ResumeComponent, resumeData, settings)
+      .then(() => {
+        trackEvent(EVENT_NAMES.EXPORT_PDF, { source: 'export_menu', method: 'native_print' })
+        setExporting(null)
+      })
+      .catch((err) => {
+        console.error('[ExportMenu] PDF print error:', err)
+        toast.error(err?.message || 'Print failed. Please allow pop-ups for this site.')
+        setExporting(null)
+      })
+  }, [resumeData, settings, ResumeComponent])
+
+  // ── FALLBACK: html2canvas image PDF (for popup-blockers / older browsers) ──
+  const doImagePDF = useCallback(async () => {
+    setOpen(false)
+    setExporting('imgpdf')
     try {
       await exportToPDF(
         resumeData, settings, ResumeComponent,
         resumeData.personal.fullName || 'resume',
-        isPro  // ← pass isPro so free users get watermark
+        isPro
       )
-      trackEvent(EVENT_NAMES.EXPORT_PDF, { source: 'export_menu' })
+      trackEvent(EVENT_NAMES.EXPORT_PDF, { source: 'export_menu', method: 'html2canvas' })
       if (!isPro) {
         toast.success('PDF downloaded! 📌 Free plan — watermark added. Upgrade to remove it.')
       } else {
         toast.success('PDF downloaded!')
       }
     } catch (err) {
-      console.error('[ExportMenu] PDF error:', err)
+      console.error('[ExportMenu] Image PDF error:', err)
       toast.error('PDF export failed. Please try again.')
     } finally {
       setExporting(null)
@@ -110,6 +133,7 @@ export default function ExportMenu({ ResumeComponent }) {
     const kind = pendingExport
     setPendingExport(null)
     if (kind === 'pdf') doPDF()
+    if (kind === 'imgpdf') doImagePDF()
     if (kind === 'docx') runDocxExport()
     if (kind === 'print') doPrint()
   }
@@ -148,23 +172,21 @@ export default function ExportMenu({ ResumeComponent }) {
   // Called after successful auth in modal
   const handleAuthSuccess = () => {
     setShowAuthModal(false)
-    if (pendingAction === 'pdf') {
-      if (useResumeStore.getState().aiAssistPendingAttestation) {
-        setPendingExport('pdf')
-        setShowAttest(true)
-      } else {
-        doPDF()
-      }
-    }
-    if (pendingAction === 'print') {
-      if (useResumeStore.getState().aiAssistPendingAttestation) {
-        setPendingExport('print')
-        setShowAttest(true)
-      } else {
-        doPrint()
-      }
-    }
+    const action = pendingAction
     setPendingAction(null)
+    const pendingAttestation = useResumeStore.getState().aiAssistPendingAttestation
+    if (action === 'pdf') {
+      if (pendingAttestation) { setPendingExport('pdf'); setShowAttest(true) }
+      else doPDF()
+    }
+    if (action === 'imgpdf') {
+      if (pendingAttestation) { setPendingExport('imgpdf'); setShowAttest(true) }
+      else doImagePDF()
+    }
+    if (action === 'print') {
+      if (pendingAttestation) { setPendingExport('print'); setShowAttest(true) }
+      else doPrint()
+    }
   }
 
   const handleCopyLink = () => {
@@ -228,19 +250,34 @@ export default function ExportMenu({ ResumeComponent }) {
             className="absolute bottom-full mb-2 right-0 w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-50 text-left"
           >
             <div className="p-1.5 space-y-0.5">
-              {/* PDF option */}
+              {/* PDF option — native browser print (Chromium quality) */}
               <button
                 onClick={handlePDF}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all text-left"
               >
                 <div className="w-8 h-8 bg-red-50 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <FileText size={14} className="text-red-500" />
+                  <Printer size={14} className="text-red-500" />
                 </div>
                 <div className="flex-1">
-                  <div className="text-sm font-bold text-gray-800">Download PDF</div>
+                  <div className="text-sm font-bold text-gray-800">Download PDF <span className="text-[9px] bg-green-100 text-green-700 font-black px-1.5 py-0.5 rounded-full ml-1">BEST</span></div>
+                  <div className="text-[10px] text-gray-400 font-medium">Native print · Full colors · A4 perfect</div>
+                </div>
+                {isGuest && <Lock size={12} className="text-gray-300 flex-shrink-0" />}
+              </button>
+
+              {/* Image PDF fallback — html2canvas (for popup blockers) */}
+              <button
+                onClick={handleImagePDF}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all text-left"
+              >
+                <div className="w-8 h-8 bg-purple-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <FileText size={14} className="text-purple-400" />
+                </div>
+                <div className="flex-1">
+                  <div className="text-sm font-bold text-gray-800">Image PDF (Fallback)</div>
                   {!isPro && !isGuest
                     ? <div className="text-[10px] text-amber-500 font-bold">Free tier — watermark included · <Link to="/upgrade" className="underline" onClick={() => setOpen(false)}>Remove →</Link></div>
-                    : <div className="text-[10px] text-gray-400 font-medium">Print-ready · A4 format</div>
+                    : <div className="text-[10px] text-gray-400 font-medium">If pop-ups are blocked · Auto-download</div>
                   }
                 </div>
                 {isGuest && <Lock size={12} className="text-gray-300 flex-shrink-0" />}

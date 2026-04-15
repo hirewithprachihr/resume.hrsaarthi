@@ -15,7 +15,7 @@ export default defineConfig({
     // Target modern browsers for smaller, faster bundles
     target: 'es2020',
     // Increase warning limit slightly (some templates are intentionally larger)
-    chunkSizeWarningLimit: 800,
+    chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
         manualChunks: (id) => {
@@ -23,12 +23,15 @@ export default defineConfig({
           if (id.includes('html2canvas') || id.includes('jspdf')) return 'pdf-engine'
           if (id.includes('docx')) return 'docx-engine'
 
+          // PDF.js — keep as its own chunk (large library)
+          if (id.includes('pdfjs-dist')) return 'pdf-reader'
+
           // Animation libraries
           if (id.includes('framer-motion')) return 'motion'
 
           // Template chunks — split large template files
-          if (id.includes('NewTemplates'))    return 'templates-new'
-          if (id.includes('ProTemplates'))    return 'templates-pro'
+          if (id.includes('NewTemplates'))       return 'templates-new'
+          if (id.includes('ProTemplates'))       return 'templates-pro'
           if (id.includes('templates/templates')) return 'templates-pro'
 
           // Supabase client — single chunk for caching
@@ -60,5 +63,13 @@ export default defineConfig({
       'lucide-react',
       'clsx',
     ],
+    // Exclude pdfjs-dist from pre-bundling — it ships with its own worker
+    // that uses dynamic imports incompatible with Vite's pre-bundling step.
+    exclude: ['pdfjs-dist'],
+  },
+
+  // Allow the PDF.js worker to be resolved from node_modules
+  worker: {
+    format: 'es',
   },
 })

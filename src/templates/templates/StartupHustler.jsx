@@ -1,4 +1,4 @@
-/** StartupHustler — high-energy, compact, achievement-focused */
+﻿/** StartupHustler — high-energy, compact, achievement-focused */
 import React from 'react'
 import { Mail, Phone, MapPin, Linkedin, Globe, Zap } from 'lucide-react'
 import { TYPE, pt } from '../typography'
@@ -85,9 +85,9 @@ const StartupHustler = React.memo(function StartupHustler({ data, settings }) {
                   </span>
                 </div>
                 {(exp.bullets || []).filter(b => b?.trim()).length > 0 && (
-                  <ul style={{ paddingLeft: `${TYPE.SPACE.BULLET_INDENT}px`, marginTop: '5px', listStyleType: 'disc' }}>
+                  <ul style={{ paddingLeft: `${TYPE.SPACE.BULLET_INDENT}px`, marginTop: '5px', listStyle: 'none' }}>
                     {exp.bullets.filter(b => b?.trim()).map((b, i) => (
-                      <li key={i} className="resume-bullet-text" style={{ ...pt(TYPE.SIZE.BULLET, TYPE.leading.relaxed), color: '#334155', marginBottom: '3px' }}>{b}</li>
+                      <li key={i} className="resume-bullet" style={{ ...pt(TYPE.SIZE.BULLET, TYPE.leading.relaxed), color: '#334155', marginBottom: '3px' }}>{b}</li>
                     ))}
                   </ul>
                 )}

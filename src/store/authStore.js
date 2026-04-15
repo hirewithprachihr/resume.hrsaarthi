@@ -10,6 +10,7 @@ import {
 // Module-level: NOT stored in Zustand to avoid serialization issues
 let _authSubscription = null
 let _sessionPromise = null
+let _authLoadingSafetyTimer = null
 
 export const useAuthStore = create(
   persist(
@@ -21,7 +22,7 @@ export const useAuthStore = create(
       subscriptionId: null,     // Razorpay subscription ID
       testMode    : false,
       isLoading   : false,
-      isAuthLoading: true, // true until first onAuthStateChange fires
+      isAuthLoading: true,      // true until first onAuthStateChange fires
 
       setUser        : (user)          => set({ user }),
       setPlan        : (plan)          => set({ plan }),
@@ -35,23 +36,30 @@ export const useAuthStore = create(
         const { _handleSession } = get()
         if (_authSubscription) { _authSubscription.unsubscribe(); _authSubscription = null }
 
-        // Use already-imported getSession — no dynamic import needed
+        // Safety net: if auth never resolves within 8s, unblock the UI
+        if (_authLoadingSafetyTimer) clearTimeout(_authLoadingSafetyTimer)
+        _authLoadingSafetyTimer = setTimeout(() => {
+          if (useAuthStore.getState().isAuthLoading) {
+            console.warn('[AuthStore] isAuthLoading safety timeout — force-clearing.')
+            set({ isAuthLoading: false })
+          }
+        }, 8000)
+
+        // Get current session — use safe wrapper to prevent lock-induced hangs
         getSession()
-            .then(async ({ data: { session } }) => {
-              if (session?.user) {
-                await _handleSession(session.user, session)
+          .then(async ({ data: { session } }) => {
+            if (session?.user) {
+              await _handleSession(session.user, session)
+            } else {
+              // If getSession returned null but user is persisted, just unblock
+              if (!get().user) {
+                set({ user: null, accessToken: null, plan: 'free', isAuthLoading: false })
               } else {
-                // IMPORTANT: If `getSession` locked and returned null, do NOT wipe the user 
-                // if they are already hydrated by persist or onAuthStateChange.
-                // Just clear the loading flag to unblock the router.
-                if (!get().user) {
-                  set({ user: null, accessToken: null, plan: 'free', isAuthLoading: false })
-                } else {
-                  set({ isAuthLoading: false })
-                }
+                set({ isAuthLoading: false })
               }
-            })
-            .catch(() => set({ isAuthLoading: false }))
+            }
+          })
+          .catch(() => set({ isAuthLoading: false }))
 
         const { data: { subscription } } = onAuthStateChange(async (event, session) => {
           if (event === 'SIGNED_OUT') {
@@ -64,52 +72,61 @@ export const useAuthStore = create(
             set({ isAuthLoading: false })
           }
         })
-        _authSubscription = subscription
 
         // Store at module level — NOT in Zustand state
         _authSubscription = subscription
       },
 
       // Internal: fetch profile & set user + plan
+      // FIXED: If a session promise is already in flight, AWAIT it (previously returned early,
+      // causing the caller's isLoading to never be cleared).
       _handleSession: async (authUser, session = null) => {
-        // Prevent concurrent execution but await the resolution
-        if (_sessionPromise) return _sessionPromise
-        
+        if (_sessionPromise) {
+          // Don't start a new session task — but WAIT for the existing one to finish
+          // so the caller's finally/isLoading properly resolves
+          return _sessionPromise
+        }
+
         const task = async () => {
           try {
-          const profile = await getProfile(authUser.id)
-          const planExpiry = profile.plan_expires_at ? new Date(profile.plan_expires_at) : null
-          let activePlan = planExpiry && planExpiry < new Date() ? 'free' : (profile.plan || 'free')
+            const profile = await getProfile(authUser.id)
+            const planExpiry = profile.plan_expires_at ? new Date(profile.plan_expires_at) : null
+            let activePlan = planExpiry && planExpiry < new Date() ? 'free' : (profile.plan || 'free')
 
-          set({
-            user: {
-              id        : authUser.id,
-              email     : authUser.email,
-              name      : profile.name || authUser.email?.split('@')[0],
-              avatar    : profile.avatar_url || null,
-            },
-            accessToken   : session?.access_token || null,
-            plan          : activePlan,
-            planExpiry    : profile.plan_expires_at || null,
-            subscriptionId: profile.subscription_id || null,
-          })
-        } catch (err) {
-          console.error('[AuthStore] Profile fetch failed:', err.message)
-          set({
-            user: {
-              id    : authUser.id,
-              email : authUser.email,
-              name  : authUser.email?.split('@')[0],
-              avatar: null,
-            },
-            accessToken: session?.access_token || null,
-            plan: 'free',
-          })
-        } finally {
-          set({ isAuthLoading: false })
+            set({
+              user: {
+                id        : authUser.id,
+                email     : authUser.email,
+                name      : profile.name || authUser.email?.split('@')[0],
+                avatar    : profile.avatar_url || null,
+              },
+              accessToken   : session?.access_token || null,
+              plan          : activePlan,
+              planExpiry    : profile.plan_expires_at || null,
+              subscriptionId: profile.subscription_id || null,
+            })
+          } catch (err) {
+            console.error('[AuthStore] Profile fetch failed:', err.message)
+            // Still set basic user info from auth token so the user isn't locked out
+            set({
+              user: {
+                id    : authUser.id,
+                email : authUser.email,
+                name  : authUser.email?.split('@')[0],
+                avatar: null,
+              },
+              accessToken: session?.access_token || null,
+              plan: 'free',
+            })
+          } finally {
+            set({ isAuthLoading: false, isLoading: false })
+            if (_authLoadingSafetyTimer) {
+              clearTimeout(_authLoadingSafetyTimer)
+              _authLoadingSafetyTimer = null
+            }
+          }
         }
-        }
-        
+
         _sessionPromise = task()
         try {
           await _sessionPromise
@@ -122,8 +139,10 @@ export const useAuthStore = create(
       register: async (email, password, name) => {
         set({ isLoading: true })
         try {
-          // signUp with options.data.full_name handles profile populating implicitly via Supabase triggers or gets pulled later
           await signUp(email, password, name)
+          // signUp success — do NOT immediately call login here.
+          // onAuthStateChange will fire if email confirm is disabled.
+          // The AuthModal handles the "check your email" state.
         } catch (err) {
           toast.error(err.message || 'Signup failed.')
           throw err
@@ -138,36 +157,47 @@ export const useAuthStore = create(
         try {
           const data = await signIn(email, password)
           if (data?.user) {
+            // _handleSession will clear isLoading in its finally block
             await get()._handleSession(data.user, data.session)
+          } else {
+            // Unexpected: signIn succeeded but no user — unblock loading
+            set({ isLoading: false })
           }
         } catch (err) {
           const msg = err.message?.includes('Invalid login')
             ? 'Invalid email or password.'
-            : err.message || 'Login failed.'
+            : err.message?.includes('Email not confirmed')
+            ? 'Please confirm your email before signing in.'
+            : err.message || 'Login failed. Please try again.'
           toast.error(msg)
+          set({ isLoading: false })  // Always clear on error — don't throw to caller
           throw err
-        } finally {
-          set({ isLoading: false })
         }
+        // Note: isLoading is cleared by _handleSession's finally block on success
       },
 
       // ── Logout ─────────────────────────────────────────────
       logout: async () => {
         try {
-          // Attempt external sign out, but catch errors to ensure local cleanup
           await signOut().catch(() => {})
         } finally {
           // Always clear local state to guarantee smooth logout
-          set({ user: null, plan: 'free', planExpiry: null, subscriptionId: null })
-          
+          set({
+            user: null,
+            accessToken: null,
+            plan: 'free',
+            planExpiry: null,
+            subscriptionId: null,
+            isLoading: false,
+            isAuthLoading: false,
+          })
+
           // Force wipe localStorage to prevent zombie sessions or stuck data
           Object.keys(localStorage).forEach(key => {
             if (key.startsWith('sb-') || key.startsWith('hwp-')) {
               localStorage.removeItem(key)
             }
           })
-          
-          // Keep navigation in caller to avoid hard reload races in some browsers.
         }
       },
 
@@ -190,7 +220,7 @@ export const useAuthStore = create(
           const expiry = new Date()
           expiry.setDate(expiry.getDate() + 30)
           const isoExpiry = expiry.toISOString()
-          
+
           await supabase.from('profiles').update({
             plan: 'pro',
             plan_expires_at: isoExpiry
@@ -222,7 +252,7 @@ export const useAuthStore = create(
         if (params.get('pro') === 'true') set({ plan: 'pro' })
       },
 
-      // Legacy no-op kept for compatibility
+      // Google OAuth
       loginWithGoogle: async () => {
         const { error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
@@ -240,7 +270,7 @@ export const useAuthStore = create(
         planExpiry    : state.planExpiry,
         subscriptionId: state.subscriptionId,
         testMode      : state.testMode,
-        // isAuthLoading is intentionally NOT persisted
+        // isAuthLoading / isLoading intentionally NOT persisted
       }),
     }
   )

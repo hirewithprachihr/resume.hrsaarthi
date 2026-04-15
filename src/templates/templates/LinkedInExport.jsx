@@ -1,4 +1,4 @@
-/** LinkedInExport — mirrors LinkedIn's visual grammar exactly */
+﻿/** LinkedInExport — mirrors LinkedIn's visual grammar exactly */
 import React from 'react'
 import { Mail, Phone, MapPin, Linkedin, Globe, ExternalLink } from 'lucide-react'
 import { TYPE, pt } from '../typography'
@@ -77,9 +77,9 @@ const LinkedInExport = React.memo(function LinkedInExport({ data, settings }) {
                     {[exp.startDate, exp.current ? 'Present' : exp.endDate].filter(Boolean).join(' – ')}
                   </div>
                   {(exp.bullets || []).filter(b => b?.trim()).length > 0 && (
-                    <ul style={{ paddingLeft: `${TYPE.SPACE.BULLET_INDENT}px`, marginTop: '6px', listStyleType: 'disc' }}>
+                    <ul style={{ paddingLeft: `${TYPE.SPACE.BULLET_INDENT}px`, marginTop: '6px', listStyle: 'none' }}>
                       {exp.bullets.filter(b => b?.trim()).map((b, i) => (
-                        <li key={i} className="resume-bullet-text" style={{ ...pt(TYPE.SIZE.BULLET, TYPE.leading.relaxed), color: '#444', marginBottom: '3px' }}>{b}</li>
+                        <li key={i} className="resume-bullet" style={{ ...pt(TYPE.SIZE.BULLET, TYPE.leading.relaxed), color: '#444', marginBottom: '3px' }}>{b}</li>
                       ))}
                     </ul>
                   )}

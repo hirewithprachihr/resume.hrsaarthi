@@ -1,4 +1,4 @@
-/**
+﻿/**
  * CampusPro — Indian Fresher / Campus Placement Template
  * ────────────────────────────────────────────────────────
  * Layout  : Single column, Education-first (India fresher standard)
@@ -167,7 +167,7 @@ export default function CampusPro({ data = {}, settings = {} }) {
                 </span>
               </div>
               {(exp.bullets || []).filter(b => b?.trim()).length > 0 && (
-                <ul style={{ paddingLeft: 16, marginTop: 4, listStyleType: 'disc' }}>
+                <ul style={{ paddingLeft: 16, marginTop: 4, listStyle: 'none' }}>
                   {exp.bullets.filter(b => b?.trim()).map((b, j) => (
                     <li key={j} style={{ fontSize: '9.5px', color: '#374151', lineHeight: 1.55, marginBottom: 2 }}>{b}</li>
                   ))}
@@ -195,7 +195,7 @@ export default function CampusPro({ data = {}, settings = {} }) {
                 </span>
               </div>
               {(exp.bullets || []).filter(b => b?.trim()).length > 0 && (
-                <ul style={{ paddingLeft: 16, marginTop: 4, listStyleType: 'disc' }}>
+                <ul style={{ paddingLeft: 16, marginTop: 4, listStyle: 'none' }}>
                   {exp.bullets.filter(b => b?.trim()).map((b, j) => (
                     <li key={j} style={{ fontSize: '9.5px', color: '#374151', lineHeight: 1.55, marginBottom: 2 }}>{b}</li>
                   ))}

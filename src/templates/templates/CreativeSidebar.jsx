@@ -10,7 +10,14 @@ const CreativeSidebar = React.memo(function CreativeSidebar({ data, settings }) 
   return (
     <div style={{ display: 'flex', fontFamily: TYPE.SANS, ...pt(TYPE.SIZE.BODY), minHeight: '100%' }}>
       {/* Sidebar */}
-      <div style={{ width: sideWidth, flexShrink: 0, background: accent, color: '#fff', padding: '40px 22px', position: 'relative', overflow: 'hidden' }}>
+      <div
+        data-is-sidebar="true"
+        style={{
+          width: sideWidth, flexShrink: 0, background: accent, color: '#fff',
+          padding: '40px 22px', position: 'relative', overflow: 'hidden',
+          WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact',
+        }}
+      >
         {/* decorative circle */}
         <div style={{ position: 'absolute', top: '-40px', right: '-40px', width: '120px', height: '120px', borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }} />
         <div style={{ position: 'absolute', bottom: '60px', left: '-30px', width: '90px', height: '90px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)' }} />
@@ -85,7 +92,7 @@ const CreativeSidebar = React.memo(function CreativeSidebar({ data, settings }) 
       </div>
 
       {/* Main */}
-      <div style={{ flex: 1, background: '#fff', padding: '40px 28px' }}>
+      <div style={{ flex: 1, background: '#fff', padding: `36px ${TYPE.SPACE.PAGE_SIDES}px` }}>
         {personal.summary?.trim() && (
           <div className="resume-entry" style={{ marginBottom: '20px', padding: '14px 16px', background: `${accent}08`, borderRadius: '10px', borderLeft: `3px solid ${accent}` }}>
             <p style={{ ...pt(TYPE.SIZE.BODY, TYPE.leading.relaxed), color: '#334155', margin: 0 }}>{personal.summary}</p>
@@ -107,9 +114,9 @@ const CreativeSidebar = React.memo(function CreativeSidebar({ data, settings }) 
                   </span>
                 </div>
                 {(exp.bullets || []).filter(b => b?.trim()).length > 0 && (
-                  <ul style={{ paddingLeft: `${TYPE.SPACE.BULLET_INDENT}px`, marginTop: '5px', listStyleType: 'disc' }}>
+                  <ul style={{ padding: 0, margin: '5px 0 0', listStyle: 'none' }}>
                     {exp.bullets.filter(b => b?.trim()).map((b, i) => (
-                      <li key={i} className="resume-bullet-text" style={{ ...pt(TYPE.SIZE.BULLET, TYPE.leading.relaxed), color: '#334155', marginBottom: '3px' }}>{b}</li>
+                      <li key={i} className="resume-bullet" style={{ ...pt(TYPE.SIZE.BULLET, TYPE.leading.relaxed), color: '#334155', marginBottom: '4px' }}>{b}</li>
                     ))}
                   </ul>
                 )}

@@ -1,12 +1,17 @@
 /**
- * AuthModal — Premium portal-mounted auth modal
- * Opens when a guest user tries to download or access a Pro feature.
- * On success, calls onSuccess() so the parent can continue the gated action.
+ * AuthModal — Premium portal-mounted auth modal v2.1
+ *
+ * FIXES:
+ *  - Removed double signup→login race condition.
+ *    After signup, we let onAuthStateChange establish the session naturally
+ *    (or show "check your email" if confirmation is required).
+ *  - Added loading timeout UI for slow networks (>10s → show refresh hint).
+ *  - Cleaned up error handling for unconfirmed emails.
  */
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Mail, Lock, Eye, EyeOff, User, FileText, Loader, CheckCircle, Sparkles, Shield } from 'lucide-react'
+import { X, Mail, Lock, Eye, EyeOff, User, Loader, CheckCircle, Sparkles, Shield, AlertCircle, RefreshCw } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { useResumeStore } from '../store/resumeStore'
 import { supabase } from '../services/supabase'
@@ -21,9 +26,32 @@ export default function AuthModal({ onClose, onSuccess, trigger = 'download' }) 
   const [showPass, setShowPass] = useState(false)
   const [forgotSent, setForgotSent] = useState(false)
   const [step, setStep]         = useState('auth') // 'auth' | 'success'
+  const [slowNetwork, setSlowNetwork] = useState(false)
+  const slowNetworkTimer = useRef(null)
 
-  const { login, register, isLoading } = useAuthStore()
-  const { loadCloudResumes, saveResume, resumeData }   = useResumeStore()
+  const { login, register, isLoading, user } = useAuthStore()
+  const { loadCloudResumes, saveResume, resumeData } = useResumeStore()
+
+  // Watch for successful auth from any source (Google OAuth redirect, etc.)
+  // When the user object populates during modal open, trigger post-auth
+  const hasTriggeredPostAuth = useRef(false)
+  useEffect(() => {
+    if (user && !hasTriggeredPostAuth.current && step === 'auth') {
+      hasTriggeredPostAuth.current = true
+      handlePostAuth()
+    }
+  }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Show slow network hint after 10s of loading
+  useEffect(() => {
+    if (isLoading) {
+      slowNetworkTimer.current = setTimeout(() => setSlowNetwork(true), 10000)
+    } else {
+      setSlowNetwork(false)
+      if (slowNetworkTimer.current) clearTimeout(slowNetworkTimer.current)
+    }
+    return () => { if (slowNetworkTimer.current) clearTimeout(slowNetworkTimer.current) }
+  }, [isLoading])
 
   const triggerMeta = {
     download: {
@@ -48,22 +76,27 @@ export default function AuthModal({ onClose, onSuccess, trigger = 'download' }) 
     e.preventDefault()
     try {
       if (mode === 'signup') {
+        // FIXED: Do NOT call login() after signup.
+        // 1. Call register — Supabase creates the account.
+        // 2a. If email confirm is OFF → onAuthStateChange fires → user populates → useEffect above handles it.
+        // 2b. If email confirm is ON  → register returns, no session → show "check email" step.
         await register(email, password, name)
-        // After signup, Supabase may require email confirm.
-        // Try to login immediately (works if email confirm is off).
-        try {
-          await login(email, password)
+
+        // After register, check if login happened automatically (confirm disabled)
+        const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }))
+        if (session?.user) {
           await handlePostAuth()
-        } catch {
-          // Email confirmation required — show success message
+        } else {
+          // Email confirmation is required
           setStep('success')
         }
       } else {
         await login(email, password)
         await handlePostAuth()
       }
-    } catch {
-      // errors toasted inside login/register
+    } catch (err) {
+      // Errors are already toasted inside login/register
+      console.error('[AuthModal] handleSubmit error:', err.message)
     }
   }
 
@@ -75,7 +108,7 @@ export default function AuthModal({ onClose, onSuccess, trigger = 'download' }) 
         await saveResume(resumeData.personal.fullName || 'My Resume')
       }
     } catch { /* non-critical */ }
-    toast.success(mode === 'signup' ? '🎉 Account created!' : '👋 Welcome back!')
+    toast.success(mode === 'signup' ? '🎉 Account created! Welcome aboard!' : '👋 Welcome back!')
     onSuccess?.()
     onClose()
   }
@@ -88,7 +121,7 @@ export default function AuthModal({ onClose, onSuccess, trigger = 'download' }) 
       })
       if (error) throw error
       setForgotSent(true)
-      toast.success('Password reset email sent!')
+      toast.success('Password reset email sent! Check your inbox.')
     } catch (err) {
       toast.error(err.message)
     }
@@ -101,7 +134,7 @@ export default function AuthModal({ onClose, onSuccess, trigger = 'download' }) 
         options : { redirectTo: `${window.location.origin}/auth/callback` },
       })
       if (error) throw error
-      // Google redirects away — store pending action
+      // Google redirects away — store pending action for post-auth callback
       sessionStorage.setItem('post_auth_action', trigger)
     } catch (err) {
       toast.error(err.message || 'Google sign-in failed')
@@ -147,13 +180,26 @@ export default function AuthModal({ onClose, onSuccess, trigger = 'download' }) 
                   <CheckCircle size={32} className="text-emerald-500" />
                 </div>
                 <h2 className="font-black text-xl text-gray-900 mb-2">Check your email!</h2>
-                <p className="text-sm text-gray-500 mb-6">We sent a confirmation link to <strong>{email}</strong>. Click it to activate your account, then come back here.</p>
-                <button
-                  onClick={onClose}
-                  className="px-6 py-3 bg-brand-600 text-white font-bold rounded-2xl hover:bg-brand-700 transition-colors text-sm"
-                >
-                  Got it
-                </button>
+                <p className="text-sm text-gray-500 mb-2">
+                  We sent a confirmation link to <strong>{email}</strong>.
+                </p>
+                <p className="text-sm text-gray-400 mb-6">
+                  Click it to activate your account, then come back here and sign in.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setStep('auth')}
+                    className="flex-1 px-4 py-3 border border-gray-200 text-gray-600 font-bold rounded-2xl hover:bg-gray-50 transition-colors text-sm"
+                  >
+                    Back to Sign In
+                  </button>
+                  <button
+                    onClick={onClose}
+                    className="flex-1 px-6 py-3 bg-brand-600 text-white font-bold rounded-2xl hover:bg-brand-700 transition-colors text-sm"
+                  >
+                    Got it!
+                  </button>
+                </div>
               </div>
             ) : (
               <>
@@ -179,7 +225,7 @@ export default function AuthModal({ onClose, onSuccess, trigger = 'download' }) 
                   {[['login', 'Sign In'], ['signup', 'Create Account']].map(([m, label]) => (
                     <button
                       key={m}
-                      onClick={() => setMode(m)}
+                      onClick={() => { setMode(m); setSlowNetwork(false) }}
                       className={clsx(
                         'flex-1 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all',
                         mode === m ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600',
@@ -265,13 +311,35 @@ export default function AuthModal({ onClose, onSuccess, trigger = 'download' }) 
                     className="w-full py-3.5 bg-gradient-to-r from-brand-600 to-brand-700 text-white font-black rounded-2xl hover:shadow-lg hover:shadow-brand-200 transition-all disabled:opacity-60 flex items-center justify-center gap-2 text-sm uppercase tracking-wider"
                   >
                     {isLoading
-                      ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Signing in…</>
+                      ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> {mode === 'login' ? 'Signing in…' : 'Creating account…'}</>
                       : mode === 'login' ? '→ Sign In & Continue' : '→ Create Free Account'
                     }
                   </button>
+
+                  {/* Slow network hint */}
+                  {slowNetwork && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-100 rounded-xl text-amber-700"
+                    >
+                      <AlertCircle size={13} className="flex-shrink-0" />
+                      <span className="text-[11px] font-semibold">
+                        Taking longer than usual… If this persists,{' '}
+                        <button
+                          type="button"
+                          onClick={() => window.location.reload()}
+                          className="underline font-bold inline-flex items-center gap-1"
+                        >
+                          <RefreshCw size={10} /> refresh the page
+                        </button>{' '}
+                        and try again.
+                      </span>
+                    </motion.div>
+                  )}
                 </form>
 
-                {/* Pro mention if upgrade trigger */}
+                {/* Pro mention if download trigger */}
                 {trigger === 'download' && (
                   <div className="mt-4 flex items-center gap-2 p-3 bg-amber-50 border border-amber-100 rounded-2xl">
                     <Sparkles size={13} className="text-amber-500 flex-shrink-0" />

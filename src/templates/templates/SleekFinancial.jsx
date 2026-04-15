@@ -54,9 +54,9 @@ export default function SleekFinancial({ data, settings }) {
                     {exp.company} {exp.location && <span className="text-slate-400 font-medium">| {exp.location}</span>}
                   </div>
                   {exp.bullets?.length > 0 && (
-                    <ul className="space-y-1.5 pl-4">
+                    <ul style={{ padding: 0, margin: '6px 0 0', listStyle: 'none' }}>
                       {exp.bullets.map((b, i) => (
-                        <li key={i} className="text-[13px] text-slate-700 leading-relaxed list-disc">
+                        <li key={i} className="resume-bullet" style={{ fontSize: '13px', color: '#374151', lineHeight: 1.55 }}>
                           {b}
                         </li>
                       ))}
@@ -74,7 +74,7 @@ export default function SleekFinancial({ data, settings }) {
             <h2 className="text-lg font-black uppercase tracking-widest text-slate-900 mb-4 border-b pb-1" style={{ borderBottomColor: '#E2E8F0' }}>
               Education
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
               {education.map(edu => (
                 <div key={edu.id} className="resume-item bg-slate-50 p-3 rounded-lg border border-slate-100" data-break-inside="avoid">
                   <h3 className="text-sm font-bold text-slate-900">{edu.degree}</h3>
